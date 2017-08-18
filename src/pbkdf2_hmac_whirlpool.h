@@ -9,7 +9,7 @@
  *
  * This is generic PBKDF2-HMAC-Whirlpool. To use this simple interface,
  * simply include this header file, and then call the pbkdf2_whirlpool()
- * function, filling in all params.  This format is same as the EVP_digest
+ * function, filling in all params.  This format is same as the EVP
  * whirlpool algorithm within OpenSSL.  It uses a 64 byte opad/ipad even
  * though the hash base width is 128 bytes. This is unlike the other
  * PBKDF2 hashes I am familiar with (sha1, sha256, sha512 and now ripemd160).
@@ -42,7 +42,7 @@
 #define WHIRLPOOL_DIGEST_LENGTH   (512/8)
 #endif
 
-// should be 128, but this is how oSSL does it in EVP_digest-whirlpool
+// should be 128, but this is how oSSL does it in EVP digest-whirlpool
 #define WHIRLPOOL_CBLOCK 64
 
 static void _pbkdf2_whirlpool_load_hmac(const unsigned char *K, int KL, WHIRLPOOL_CTX *pIpad, WHIRLPOOL_CTX *pOpad) {
@@ -60,7 +60,7 @@ static void _pbkdf2_whirlpool_load_hmac(const unsigned char *K, int KL, WHIRLPOO
 		KL = WHIRLPOOL_DIGEST_LENGTH;
 		K = k0;
 	}
-	for(i = 0; i < KL; i++) {
+	for (i = 0; i < KL; i++) {
 		ipad[i] ^= K[i];
 		opad[i] ^= K[i];
 	}
@@ -74,7 +74,7 @@ static void _pbkdf2_whirlpool_load_hmac(const unsigned char *K, int KL, WHIRLPOO
 	WHIRLPOOL_Update(pOpad, opad, WHIRLPOOL_CBLOCK);
 }
 
-static void _pbkdf2_whirlpool(const unsigned char *S, int SL, int R, ARCH_WORD_32 *out,
+static void _pbkdf2_whirlpool(const unsigned char *S, int SL, int R, uint32_t *out,
 	                     unsigned char loop, const WHIRLPOOL_CTX *pIpad, const WHIRLPOOL_CTX *pOpad) {
 	WHIRLPOOL_CTX ctx;
 	unsigned char tmp_hash[WHIRLPOOL_DIGEST_LENGTH];
@@ -93,7 +93,7 @@ static void _pbkdf2_whirlpool(const unsigned char *S, int SL, int R, ARCH_WORD_3
 
 	memcpy(out, tmp_hash, WHIRLPOOL_DIGEST_LENGTH);
 
-	for(i = 1; i < R; i++) {
+	for (i = 1; i < R; i++) {
 		memcpy(&ctx, pIpad, sizeof(WHIRLPOOL_CTX));
 		WHIRLPOOL_Update(&ctx, tmp_hash, WHIRLPOOL_DIGEST_LENGTH);
 		WHIRLPOOL_Final(tmp_hash, &ctx);
@@ -101,15 +101,15 @@ static void _pbkdf2_whirlpool(const unsigned char *S, int SL, int R, ARCH_WORD_3
 		memcpy(&ctx, pOpad, sizeof(WHIRLPOOL_CTX));
 		WHIRLPOOL_Update(&ctx, tmp_hash, WHIRLPOOL_DIGEST_LENGTH);
 		WHIRLPOOL_Final(tmp_hash, &ctx);
-		for(j = 0; j < WHIRLPOOL_DIGEST_LENGTH/sizeof(ARCH_WORD_32); j++) {
-			out[j] ^= ((ARCH_WORD_32*)tmp_hash)[j];
+		for (j = 0; j < WHIRLPOOL_DIGEST_LENGTH/sizeof(uint32_t); j++) {
+			out[j] ^= ((uint32_t*)tmp_hash)[j];
 		}
 	}
 }
 static void pbkdf2_whirlpool(const unsigned char *K, int KL, const unsigned char *S, int SL, int R, unsigned char *out, int outlen, int skip_bytes)
 {
 	union {
-		ARCH_WORD_32 x32[WHIRLPOOL_DIGEST_LENGTH/sizeof(ARCH_WORD_32)];
+		uint32_t x32[WHIRLPOOL_DIGEST_LENGTH/sizeof(uint32_t)];
 		unsigned char out[WHIRLPOOL_DIGEST_LENGTH];
 	} tmp;
 	int loop, loops, i, accum=0;

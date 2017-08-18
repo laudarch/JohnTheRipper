@@ -118,7 +118,7 @@ static size_t key_buf_size;
 static unsigned int *inbuffer;
 static pbkdf2_salt currentsalt;
 static pbkdf2_out *output;
-static ARCH_WORD_32 (*crypt_out)[BINARY_SIZE / sizeof(ARCH_WORD_32)];
+static uint32_t (*crypt_out)[BINARY_SIZE / sizeof(uint32_t)];
 
 static int new_keys;
 
@@ -419,7 +419,7 @@ static int valid(char *ciphertext, struct fmt_main *self)
 
 	// We support a max. total salt length of 52.
 	// We could opt to emit a warning if rejected here.
-	if(saltlen > MAX_SALTLEN) {
+	if (saltlen > MAX_SALTLEN) {
 		static int warned = 0;
 
 		if (!ldr_in_pot)

@@ -82,7 +82,7 @@ static int omp_t = 1;
 #define BINARY_SIZE		20 /* SHA1 */
 #define BINARY_SIZE_SMALLER	16 /* MD5 */
 #define SALT_SIZE		sizeof(psk_entry)
-#define BINARY_ALIGN		sizeof(ARCH_WORD_32)
+#define BINARY_ALIGN		sizeof(uint32_t)
 #define SALT_ALIGN			sizeof(size_t)
 #define MIN_KEYS_PER_CRYPT	1
 #define MAX_KEYS_PER_CRYPT	16
@@ -95,7 +95,7 @@ static struct fmt_tests ike_tests[] = {
 
 static psk_entry *cur_salt;
 static char (*saved_key)[PLAINTEXT_LENGTH + 1];
-static ARCH_WORD_32 (*crypt_out)[BINARY_SIZE / sizeof(ARCH_WORD_32)];
+static uint32_t (*crypt_out)[BINARY_SIZE / sizeof(uint32_t)];
 
 static void init(struct fmt_main *self)
 {
@@ -245,14 +245,14 @@ static int cmp_all(void *binary, int count)
 {
 	int index = 0;
 	for (; index < count; index++)
-		if (*((ARCH_WORD_32*)binary) == crypt_out[index][0])
+		if (*((uint32_t*)binary) == crypt_out[index][0])
 			return 1;
 	return 0;
 }
 
 static int cmp_one(void *binary, int index)
 {
-	return (*((ARCH_WORD_32*)binary) == crypt_out[index][0]);
+	return (*((uint32_t*)binary) == crypt_out[index][0]);
 }
 
 static int cmp_exact(char *source, int index)
@@ -310,7 +310,7 @@ struct fmt_main fmt_ike = {
 		SALT_ALIGN,
 		MIN_KEYS_PER_CRYPT,
 		MAX_KEYS_PER_CRYPT,
-		FMT_CASE | FMT_8_BIT | FMT_OMP,
+		FMT_CASE | FMT_8_BIT | FMT_OMP | FMT_HUGE_INPUT,
 		{
 #if IKE_REPORT_TUNABLE_COSTS
 			"hash algorithm used for hmac [1:MD5 2:SHA1]",
@@ -338,7 +338,7 @@ struct fmt_main fmt_ike = {
 		},
 		fmt_default_source,
 		{
-			fmt_default_binary_hash /* Not usable with $SOURCE_HASH$ */
+			fmt_default_binary_hash
 		},
 		fmt_default_salt_hash,
 		NULL,
@@ -348,7 +348,7 @@ struct fmt_main fmt_ike = {
 		fmt_default_clear_keys,
 		crypt_all,
 		{
-			fmt_default_get_hash /* Not usable with $SOURCE_HASH$ */
+			fmt_default_get_hash
 		},
 		cmp_all,
 		cmp_one,

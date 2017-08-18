@@ -41,6 +41,7 @@
  *
  */
 
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #if !AC_BUILT || HAVE_LIMITS_H
@@ -58,7 +59,6 @@
 #include "params.h"
 #include "crc32.h"
 #include "unicode.h"
-#include "stdint.h"
 #include "jumbo.h"
 #include "base64_convert.h"
 #include "sha2.h"
@@ -179,12 +179,10 @@ static void process_file(const char *archive_name)
 	char *gecos, *best = NULL;
 	int best_len = 0, gecos_len = 0;
 
-	/* We misuse PATH_BUFFER_SIZE as a sane maximum for this */
-	gecos = mem_calloc(1, PATH_BUFFER_SIZE);
+	gecos = mem_calloc(1, LINE_BUFFER_SIZE);
 
 	strnzcpy(path, archive_name, sizeof(path));
 	base_aname = basename(path);
-	gecos[0] = 0;
 	errno = 0;
 
 	if (!(fp = fopen(archive_name, "rb"))) {
@@ -204,7 +202,7 @@ static void process_file(const char *archive_name)
 			/* jump to "Rar!" signature */
 			while (!feof(fp)) {
 				count = fread(buf, 1, CHUNK_SIZE, fp);
-				if( (pos = memmem(buf, count, "\x52\x61\x72\x21\x1a\x07\x00", 7))) {
+				if ( (pos = memmem(buf, count, "\x52\x61\x72\x21\x1a\x07\x00", 7))) {
 					diff = count - (pos - buf);
 					jtr_fseek64(fp, - diff, SEEK_CUR);
 					jtr_fseek64(fp, 7, SEEK_CUR);
@@ -451,8 +449,9 @@ next_file_header:
         else
 			fprintf(stderr, "! file name: %s\n", file_name);
 
-		/* We duplicate file name to the GECOS field, for single mode */
-		gecos_len += snprintf(&gecos[gecos_len], PATH_BUFFER_SIZE - 1, "%s ", (char*)file_name);
+		/* We duplicate file names to the GECOS field, for single mode */
+		if (gecos_len + strlen((char*)file_name) < LINE_BUFFER_SIZE)
+			gecos_len += snprintf(&gecos[gecos_len], LINE_BUFFER_SIZE - gecos_len - 1, "%s ", (char*)file_name);
 
 		/* salt processing */
 		if (file_header_head_flags & 0x400) {
@@ -518,7 +517,7 @@ next_file_header:
 		bestsize = file_header_unp_size;
 
 		MEM_FREE(best);
-		best = mem_calloc(1, LINE_BUFFER_SIZE + 2 * file_header_pack_size);
+		best = mem_calloc(1, 2 * LINE_BUFFER_SIZE + 2 * file_header_pack_size);
 
 		/* process encrypted data of size "file_header_pack_size" */
 		best_len = sprintf(best, "%s:$RAR3$*%d*", base_aname, type);
@@ -833,7 +832,7 @@ static int process_file5(const char *archive_name) {
 			/* jump to "Rar!" signature */
 			while (!feof(fp)) {
 				count = fread(buf, 1, CHUNK_SIZE, fp);
-				if( (pos = (char*)memmem(buf, count, "\x52\x61\x72\x21\x1a\x07\x01\x00", 8))) {
+				if ( (pos = (char*)memmem(buf, count, "\x52\x61\x72\x21\x1a\x07\x01\x00", 8))) {
 					diff = count - (pos - buf);
 					jtr_fseek64(fp, - diff, SEEK_CUR);
 					jtr_fseek64(fp, 8, SEEK_CUR);

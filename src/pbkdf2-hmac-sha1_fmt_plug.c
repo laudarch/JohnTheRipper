@@ -14,6 +14,7 @@ john_register_one(&fmt_pbkdf2_hmac_sha1);
 #include <ctype.h>
 #include <string.h>
 #include <assert.h>
+#include <stdint.h>
 
 #include "arch.h"
 #include "misc.h"
@@ -21,7 +22,6 @@ john_register_one(&fmt_pbkdf2_hmac_sha1);
 #include "formats.h"
 #include "johnswap.h"
 #include "base64_convert.h"
-#include "stdint.h"
 #include "pbkdf2_hmac_sha1.h"
 #include "pbkdf2_hmac_common.h"
 
@@ -41,9 +41,9 @@ john_register_one(&fmt_pbkdf2_hmac_sha1);
 #define ALGORITHM_NAME          "PBKDF2-SHA1 32/" ARCH_BITS_STR
 #endif
 
-#define BINARY_ALIGN            sizeof(ARCH_WORD_32)
+#define BINARY_ALIGN            sizeof(uint32_t)
 #define SALT_SIZE               sizeof(struct custom_salt)
-#define SALT_ALIGN              sizeof(ARCH_WORD_32)
+#define SALT_ALIGN              sizeof(uint32_t)
 
 #ifdef SIMD_COEF_32
 #define MIN_KEYS_PER_CRYPT      SSE_GROUP_SZ_SHA1
@@ -65,7 +65,7 @@ static struct custom_salt {
 } *cur_salt;
 
 static char (*saved_key)[PLAINTEXT_LENGTH + 1];
-static ARCH_WORD_32 (*crypt_out)[PBKDF2_SHA1_BINARY_SIZE / sizeof(ARCH_WORD_32)];
+static uint32_t (*crypt_out)[PBKDF2_SHA1_BINARY_SIZE / sizeof(uint32_t)];
 
 static void init(struct fmt_main *self)
 {
@@ -141,7 +141,7 @@ static int crypt_all(int *pcount, struct db_salt *salt)
 		int lens[SSE_GROUP_SZ_SHA1], i;
 		unsigned char *pin[SSE_GROUP_SZ_SHA1];
 		union {
-			ARCH_WORD_32 *pout[SSE_GROUP_SZ_SHA1];
+			uint32_t *pout[SSE_GROUP_SZ_SHA1];
 			unsigned char *poutc;
 		} x;
 		for (i = 0; i < SSE_GROUP_SZ_SHA1; ++i) {

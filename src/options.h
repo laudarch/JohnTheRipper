@@ -230,6 +230,12 @@ struct options_main {
 /* Ciphertext subformat name */
 	char *subformat;
 
+/* Single mode seed word (--single-seed) */
+	char *seed_word;
+
+/* Single mode seed wordlist file name (--single-wordlist) */
+	char *seed_file;
+
 /* Configuration file name */
 	char *config;
 
@@ -334,6 +340,9 @@ struct options_main {
  */
 	int max_run_time;
 
+/* Graceful exit after this many candidates tried. */
+	long long max_cands;
+
 /* Emit a status line every N seconds */
 	int status_interval;
 
@@ -357,7 +366,7 @@ struct options_main {
 /* Vector width of OpenCL kernel */
 	unsigned int v_width;
 #endif
-#if defined(HAVE_OPENCL) || defined(HAVE_CUDA)
+#if defined(HAVE_OPENCL)
 	struct list_main *gpu_devices;
 #endif
 /* -list=WHAT Get a config list (eg. a list of incremental modes available) */

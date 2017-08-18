@@ -322,9 +322,9 @@ static char *split(char *ciphertext, int index, struct fmt_main *self)
 	return out;
 }
 
-static ARCH_WORD_32 *generate_des_format(uchar* binary)
+static uint32_t *generate_des_format(uchar* binary)
 {
-	static ARCH_WORD_32 out[6];
+	static uint32_t out[6];
 	ARCH_WORD block[6];
 	int chr, src,dst,i;
 	uchar value, mask;
@@ -335,7 +335,7 @@ static ARCH_WORD_32 *generate_des_format(uchar* binary)
 	for (chr = 0; chr < 24; chr=chr + 8)
 	{
 		dst = 0;
-		for(i=0; i<8; i++)
+		for (i=0; i<8; i++)
 		{
 			value = binary[chr + i];
 			mask = 0x80;
@@ -350,7 +350,7 @@ static ARCH_WORD_32 *generate_des_format(uchar* binary)
 	}
 
 	/* Apply initial permutation on ciphertext blocks */
-	for(i=0; i<6; i=i+2)
+	for (i=0; i<6; i=i+2)
 	{
 		ptr = DES_do_IP(&block[i]);
 		out[i] = ptr[1];
@@ -364,7 +364,7 @@ static void *get_binary(char *ciphertext)
 {
 	uchar binary[BINARY_SIZE];
 	int i;
-	ARCH_WORD_32 *ptr;
+	uint32_t *ptr;
 
 	if (valid_short(ciphertext))
 		ciphertext += FORMAT_TAG_LEN + CHALLENGE_LENGTH / 4 + 1; /* Skip - $MSCHAPv2$, MSCHAPv2 Challenge */
@@ -381,7 +381,7 @@ static void *get_binary(char *ciphertext)
 	return ptr;
 }
 
-static inline void setup_des_key(unsigned char key_56[], int index)
+inline static void setup_des_key(unsigned char key_56[], int index)
 {
 	char key[8];
 
@@ -439,17 +439,17 @@ static int crypt_all(int *pcount, struct db_salt *salt)
 
 static int cmp_all(void *binary, int count)
 {
-	return DES_bs_cmp_all((ARCH_WORD_32 *)binary, count);
+	return DES_bs_cmp_all((uint32_t *)binary, count);
 }
 
 static int cmp_one(void *binary, int index)
 {
-	return DES_bs_cmp_one((ARCH_WORD_32 *)binary, 32, index);
+	return DES_bs_cmp_one((uint32_t *)binary, 32, index);
 }
 
 static int cmp_exact(char *source, int index)
 {
-	ARCH_WORD_32 *binary = get_binary(source);
+	uint32_t *binary = get_binary(source);
 
 	if (!DES_bs_cmp_one(binary, 64, index))
 		return 0;
@@ -491,7 +491,7 @@ static void *get_salt(char *ciphertext)
 {
 	static union {
 		unsigned char u8[SALT_SIZE];
-		ARCH_WORD_32 u32[SALT_SIZE / 4];
+		uint32_t u32[SALT_SIZE / 4];
 	} binary_salt;
 	int i, cnt;
 	uchar j;
@@ -594,7 +594,7 @@ static char *get_key(int index)
 
 static int salt_hash(void *salt)
 {
-	return *(ARCH_WORD_32 *)salt & (SALT_HASH_SIZE - 1);
+	return *(uint32_t *)salt & (SALT_HASH_SIZE - 1);
 }
 
 struct fmt_main fmt_MSCHAPv2_old = {

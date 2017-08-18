@@ -20,13 +20,13 @@ john_register_one(&fmt_ocl_rar5);
 #include <ctype.h>
 #include <string.h>
 #include <assert.h>
+#include <stdint.h>
 
 //#define DEBUG
 
 #include "misc.h"
 #include "arch.h"
 #include "common.h"
-#include "stdint.h"
 #include "formats.h"
 #include "options.h"
 #include "common-opencl.h"
@@ -43,8 +43,6 @@ john_register_one(&fmt_ocl_rar5);
 
 #define BENCHMARK_COMMENT	""
 #define BENCHMARK_LENGTH	-1
-#define DEFAULT_LWS		64
-#define DEFAULT_GWS		1024
 #define STEP			0
 #define SEED			1024
 
@@ -262,7 +260,7 @@ static int crypt_all(int *pcount, struct db_salt *salt)
 		1, NULL, &global_work_size, lws, 0, NULL,
 		multi_profilingEvent[2]), "Run kernel");
 
-	for(i = 0; i < (ocl_autotune_running ? 1 : loops); i++) {
+	for (i = 0; i < (ocl_autotune_running ? 1 : loops); i++) {
 		BENCH_CLERROR(clEnqueueNDRangeKernel(queue[gpu_id], split_kernel,
 			1, NULL, &global_work_size, lws, 0, NULL,
 			multi_profilingEvent[3]), "Run split kernel");

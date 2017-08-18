@@ -1,11 +1,17 @@
+/*
+ * Word Generator version 2
+ *
+ * This software is Copyright (c) 2016 Denis Burykin
+ * [denis_burykin yahoo com], [denis-burykin2014 yandex ru]
+ * and it is hereby released to the general public under the following terms:
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted.
+ *
+ * Note: start_idx, num_generate actually not used.
+ *
+ */
 
 #define PKT_TYPE_WORD_GEN	2
-
-// ***************************************************************
-//
-// Word Generator version 2
-//
-// ***************************************************************
 
 #define RANGES_MAX		4
 // Well. If on-device generator is built with CHAR_BITS==7
@@ -28,5 +34,5 @@ struct word_gen {
 
 struct word_gen word_gen_words_pass_by;
 
-struct pkt *pkt_word_gen_new(struct word_gen *word_gen, int num_generate);
+struct pkt *pkt_word_gen_new(struct word_gen *word_gen);
 

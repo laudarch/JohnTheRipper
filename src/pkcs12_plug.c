@@ -31,6 +31,7 @@
 #include "sha2.h"
 #include "simd-intrinsics.h"
 #include "pkcs12.h"
+#include "sph_whirlpool.h"
 
 #define PKCS12_MAX_PWDLEN 128
 
@@ -46,17 +47,19 @@ int pkcs12_pbe_derive_key( int md_type, int iterations, int id, const unsigned
 	size_t i;
 	unsigned char unipwd[PKCS12_MAX_PWDLEN * 2 + 2], *cp=unipwd;
 
-	if( pwdlen > PKCS12_MAX_PWDLEN )
+	if ( pwdlen > PKCS12_MAX_PWDLEN )
 		return -1;
 
-	for( i = 0; i < pwdlen; i++ ) {
+	for ( i = 0; i < pwdlen; i++ ) {
 		*cp++ = 0;
 		*cp++ = pwd[i];
 	}
 	*cp++ = 0;
 	*cp = 0;
 
-	if (md_type == 1 || md_type == 256 || md_type == 512 || md_type == 224 || md_type == 384)
+	// 2  => BestCrypt specific PKCS12 Whirlpool-512, hack
+	// 10 => BestCrypt specific PKCS12 SHA-512, hack
+	if (md_type == 1 || md_type == 256 || md_type == 512 || md_type == 224 || md_type == 384 || md_type == 2 || md_type == 10)
 		mbedtls_pkcs12_derivation(key, keylen, unipwd, pwdlen * 2 + 2, salt,
 				saltlen, md_type, id, iterations);
     return 0;
@@ -94,9 +97,10 @@ static int mbedtls_pkcs12_derivation( unsigned char *data, size_t datalen, const
     SHA_CTX md_ctx;
     SHA256_CTX md_ctx256;
     SHA512_CTX md_ctx512;
+    sph_whirlpool_context md_ctx_whrl;
 
     // This version only allows max of 48 bytes of password or salt
-    if( datalen > 128 || pwdlen > 48*2+2 || saltlen > 64 )
+    if ( datalen > 128 || pwdlen > 48*2+2 || saltlen > 64 )
         return -1; // MBEDTLS_ERR_PKCS12_BAD_INPUT_DATA
 
     switch (md_type) {
@@ -107,7 +111,7 @@ static int mbedtls_pkcs12_derivation( unsigned char *data, size_t datalen, const
 	case 1:
 		hlen = 20;	// for SHA1
 		v = 64;
-		v2 = ((pwdlen+64)/64)*64;
+		v2 = ((pwdlen+64-1)/64)*64;
 		break;
 
 //	case 2:			// for mdc2  (Note, not handled by ans1crypt.py)
@@ -127,12 +131,12 @@ static int mbedtls_pkcs12_derivation( unsigned char *data, size_t datalen, const
 	case 224:
 		hlen = 28;	// for SHA224
 		v = 64;
-		v2 = ((pwdlen+64)/64)*64;
+		v2 = ((pwdlen+64-1)/64)*64;
 		break;
 	case 256:
 		hlen = 32;	// for SHA256
 		v = 64;
-		v2 = ((pwdlen+64)/64)*64;
+		v2 = ((pwdlen+64-1)/64)*64;
 		break;
 	case 384:
 		hlen = 48;	// for SHA384
@@ -141,6 +145,14 @@ static int mbedtls_pkcs12_derivation( unsigned char *data, size_t datalen, const
 	case 512:
 		hlen = 64;	// for SHA512
 		v2 = v = 128;
+		break;
+	case 2:
+		hlen = 64;	// for Whirlpool 512
+		v2 = v = 64;    // BestCrypt always sets this to 64 for all cases!
+		break;
+	case 10:
+		hlen = 64;	// for SHA512
+		v2 = v = 64;	// BestCrypt always sets this to 64 for all cases!
 		break;
 	default:
 		return -1;
@@ -155,93 +167,107 @@ static int mbedtls_pkcs12_derivation( unsigned char *data, size_t datalen, const
     while( datalen > 0 )
     {
         // Calculate hash( diversifier || salt_block || pwd_block )
-	switch (md_type) {
+	    switch (md_type) {
 	    case 1:
-    	        SHA1_Init(&md_ctx);
-                SHA1_Update(&md_ctx, diversifier, v);
-                SHA1_Update(&md_ctx, salt_block, v);
-                SHA1_Update(&md_ctx, pwd_block, v2);
-                SHA1_Final(hash_output, &md_ctx);
-                // Perform remaining ( iterations - 1 ) recursive hash calculations
-                for( i = 1; i < (size_t) iterations; i++ ) {
-                    SHA1_Init(&md_ctx);
-                    SHA1_Update(&md_ctx, hash_output, hlen);
-                    SHA1_Final(hash_output, &md_ctx);
-                }
-		break;
+		    SHA1_Init(&md_ctx);
+		    SHA1_Update(&md_ctx, diversifier, v);
+		    SHA1_Update(&md_ctx, salt_block, v);
+		    SHA1_Update(&md_ctx, pwd_block, v2);
+		    SHA1_Final(hash_output, &md_ctx);
+		    // Perform remaining ( iterations - 1 ) recursive hash calculations
+		    for ( i = 1; i < (size_t) iterations; i++ ) {
+			    SHA1_Init(&md_ctx);
+			    SHA1_Update(&md_ctx, hash_output, hlen);
+			    SHA1_Final(hash_output, &md_ctx);
+		    }
+		    break;
 	    case 224:
-	    	SHA224_Init(&md_ctx256);
-                SHA224_Update(&md_ctx256, diversifier, v);
-                SHA224_Update(&md_ctx256, salt_block, v);
-                SHA224_Update(&md_ctx256, pwd_block, v2);
-                SHA224_Final(hash_output, &md_ctx256);
-                // Perform remaining ( iterations - 1 ) recursive hash calculations
-                for( i = 1; i < (size_t) iterations; i++ ) {
-                    SHA224_Init(&md_ctx256);
-                    SHA224_Update(&md_ctx256, hash_output, hlen);
-                    SHA224_Final(hash_output, &md_ctx256);
-                }
-		break;
-    	    case 256:
-	    	SHA256_Init(&md_ctx256);
-                SHA256_Update(&md_ctx256, diversifier, v);
-                SHA256_Update(&md_ctx256, salt_block, v);
-                SHA256_Update(&md_ctx256, pwd_block, v2);
-                SHA256_Final(hash_output, &md_ctx256);
-                // Perform remaining ( iterations - 1 ) recursive hash calculations
-                for( i = 1; i < (size_t) iterations; i++ ) {
-                    SHA256_Init(&md_ctx256);
-                    SHA256_Update(&md_ctx256, hash_output, hlen);
-                    SHA256_Final(hash_output, &md_ctx256);
-                }
-		break;
+		    SHA224_Init(&md_ctx256);
+		    SHA224_Update(&md_ctx256, diversifier, v);
+		    SHA224_Update(&md_ctx256, salt_block, v);
+		    SHA224_Update(&md_ctx256, pwd_block, v2);
+		    SHA224_Final(hash_output, &md_ctx256);
+		    // Perform remaining ( iterations - 1 ) recursive hash calculations
+		    for ( i = 1; i < (size_t) iterations; i++ ) {
+			    SHA224_Init(&md_ctx256);
+			    SHA224_Update(&md_ctx256, hash_output, hlen);
+			    SHA224_Final(hash_output, &md_ctx256);
+		    }
+		    break;
+	    case 256:
+		    SHA256_Init(&md_ctx256);
+		    SHA256_Update(&md_ctx256, diversifier, v);
+		    SHA256_Update(&md_ctx256, salt_block, v);
+		    SHA256_Update(&md_ctx256, pwd_block, v2);
+		    SHA256_Final(hash_output, &md_ctx256);
+		    // Perform remaining ( iterations - 1 ) recursive hash calculations
+		    for ( i = 1; i < (size_t) iterations; i++ ) {
+			    SHA256_Init(&md_ctx256);
+			    SHA256_Update(&md_ctx256, hash_output, hlen);
+			    SHA256_Final(hash_output, &md_ctx256);
+		    }
+		    break;
 	    case 384:
-	    	SHA384_Init(&md_ctx512);
-                SHA384_Update(&md_ctx512, diversifier, v);
-                SHA384_Update(&md_ctx512, salt_block, v);
-                SHA384_Update(&md_ctx512, pwd_block, v);
-                SHA384_Final(hash_output, &md_ctx512);
-                // Perform remaining ( iterations - 1 ) recursive hash calculations
-                for( i = 1; i < (size_t) iterations; i++ ) {
-                    SHA384_Init(&md_ctx512);
-                    SHA384_Update(&md_ctx512, hash_output, hlen);
-                    SHA384_Final(hash_output, &md_ctx512);
-                }
-		break;
+		    SHA384_Init(&md_ctx512);
+		    SHA384_Update(&md_ctx512, diversifier, v);
+		    SHA384_Update(&md_ctx512, salt_block, v);
+		    SHA384_Update(&md_ctx512, pwd_block, v);
+		    SHA384_Final(hash_output, &md_ctx512);
+		    // Perform remaining ( iterations - 1 ) recursive hash calculations
+		    for ( i = 1; i < (size_t) iterations; i++ ) {
+			    SHA384_Init(&md_ctx512);
+			    SHA384_Update(&md_ctx512, hash_output, hlen);
+			    SHA384_Final(hash_output, &md_ctx512);
+		    }
+		    break;
+	    case 10: // fall through
 	    case 512:
-	    	SHA512_Init(&md_ctx512);
-                SHA512_Update(&md_ctx512, diversifier, v);
-                SHA512_Update(&md_ctx512, salt_block, v);
-                SHA512_Update(&md_ctx512, pwd_block, v);
-                SHA512_Final(hash_output, &md_ctx512);
-                // Perform remaining ( iterations - 1 ) recursive hash calculations
-                for( i = 1; i < (size_t) iterations; i++ ) {
-                    SHA512_Init(&md_ctx512);
-                    SHA512_Update(&md_ctx512, hash_output, hlen);
-                    SHA512_Final(hash_output, &md_ctx512);
-                }
-		break;
-	}
+		    SHA512_Init(&md_ctx512);
+		    SHA512_Update(&md_ctx512, diversifier, v);
+		    SHA512_Update(&md_ctx512, salt_block, v);
+		    SHA512_Update(&md_ctx512, pwd_block, v);
+		    SHA512_Final(hash_output, &md_ctx512);
+		    // Perform remaining ( iterations - 1 ) recursive hash calculations
+		    for ( i = 1; i < (size_t) iterations; i++ ) {
+			    SHA512_Init(&md_ctx512);
+			    SHA512_Update(&md_ctx512, hash_output, hlen);
+			    SHA512_Final(hash_output, &md_ctx512);
+		    }
+		    break;
+	    case 2:
+		    sph_whirlpool_init(&md_ctx_whrl);
+		    sph_whirlpool(&md_ctx_whrl, diversifier, v);
+		    sph_whirlpool(&md_ctx_whrl, salt_block, v);
+		    sph_whirlpool(&md_ctx_whrl, pwd_block, v);
+		    sph_whirlpool_close(&md_ctx_whrl, hash_output);
+		    // Perform remaining ( iterations - 1 ) recursive hash calculations
+		    for ( i = 1; i < (size_t) iterations; i++ ) {
+			    sph_whirlpool_init(&md_ctx_whrl);
+			    sph_whirlpool(&md_ctx_whrl, hash_output, hlen);
+			    sph_whirlpool_close(&md_ctx_whrl, hash_output);
+		    }
+		    break;
+	    }
 
         use_len = ( datalen > hlen ) ? hlen : datalen;
         memcpy( p, hash_output, use_len );
         datalen -= use_len;
         p += use_len;
 
-        if( datalen == 0 )
+        if ( datalen == 0 )
             break;
 
         // Concatenating copies of hash_output into hash_block (B)
         pkcs12_fill_buffer( hash_block, v, hash_output, hlen );
 
         // B += 1
-        for( i = v; i > 0; i-- )
-            if( ++hash_block[i - 1] != 0 )
+        for ( i = v; i > 0; i-- )
+            if ( ++hash_block[i - 1] != 0 )
                 break;
 
         // salt_block += B
         c = 0;
-        for( i = v; i > 0; i-- )
+        for ( i = v; i > 0; i-- )
         {
             j = salt_block[i - 1] + hash_block[i - 1] + c;
             c = (unsigned char) (j >> 8);
@@ -250,7 +276,7 @@ static int mbedtls_pkcs12_derivation( unsigned char *data, size_t datalen, const
 
         // pwd_block  += B
         c = 0;
-        for( i = v; i > 0; i-- )
+        for ( i = v; i > 0; i-- )
         {
             j = pwd_block[i - 1] + hash_block[i - 1] + c;
             c = (unsigned char) (j >> 8);
@@ -308,9 +334,9 @@ int pkcs12_pbe_derive_key_simd(int md_type, int iterations, int id, const unsign
 
 		unipwd[j] = unipwd_[j];
 		cpo = (unsigned char*)unipwd[j];
-		if( len > PKCS12_MAX_PWDLEN )
+		if ( len > PKCS12_MAX_PWDLEN )
 			return -1;
-		for( i = 0; i < len; i++ ) {
+		for ( i = 0; i < len; i++ ) {
 			*cpo++ = 0;
 			*cpo++ = *cpi++;
 		}
@@ -336,9 +362,9 @@ static int pkcs12_pbe_derive_key_simd_sha256( int iterations, int id, const unsi
 
 		unipwd[j] = unipwd_[j];
 		cpo = (unsigned char*)unipwd[j];
-		if( len > PKCS12_MAX_PWDLEN )
+		if ( len > PKCS12_MAX_PWDLEN )
 			return -1;
-		for( i = 0; i < len; i++ ) {
+		for ( i = 0; i < len; i++ ) {
 			*cpo++ = 0;
 			*cpo++ = *cpi++;
 		}
@@ -406,7 +432,7 @@ int mbedtls_pkcs12_derivation_simd1( unsigned char *data[SSE_GROUP_SZ_SHA1], siz
 	unsigned char hash_output_[SSE_GROUP_SZ_SHA1][128], *hash_output[SSE_GROUP_SZ_SHA1], hash[128];
 	unsigned char *p;
 	unsigned char c;
-	JTR_ALIGN(MEM_ALIGN_SIMD) unsigned char sse_buf[SHA_BUF_SIZ*sizeof(ARCH_WORD_32)*SSE_GROUP_SZ_SHA1];
+	JTR_ALIGN(MEM_ALIGN_SIMD) unsigned char sse_buf[SHA_BUF_SIZ*sizeof(uint32_t)*SSE_GROUP_SZ_SHA1];
 
 	size_t hlen, use_len, v, v2, i;
 
@@ -436,7 +462,7 @@ int mbedtls_pkcs12_derivation_simd1( unsigned char *data[SSE_GROUP_SZ_SHA1], siz
 
 			SHA1_Update( &md_ctx, diversifier, v );
 			SHA1_Update( &md_ctx, salt_block[k], v );
-			v2 = ((pwdlen[k]+64)/64)*64;
+			v2 = ((pwdlen[k]+64-1)/64)*64;
 			SHA1_Update( &md_ctx, pwd_block[k], v2 );
 			SHA1_Final( hash, &md_ctx );
 			for (i = 0; i < SHA_DIGEST_LENGTH; ++i) {
@@ -447,8 +473,8 @@ int mbedtls_pkcs12_derivation_simd1( unsigned char *data[SSE_GROUP_SZ_SHA1], siz
 		}
 
 		// Perform remaining ( iterations - 1 ) recursive hash calculations
-		for( i = 1; i < (size_t) iterations; i++ )
-			SIMDSHA1body(sse_buf, (ARCH_WORD_32*)sse_buf, NULL, SSEi_MIXED_IN|SSEi_OUTPUT_AS_INP_FMT);
+		for ( i = 1; i < (size_t) iterations; i++ )
+			SIMDSHA1body(sse_buf, (uint32_t*)sse_buf, NULL, SSEi_MIXED_IN|SSEi_OUTPUT_AS_INP_FMT);
 
 		// Now unmarshall the data from sse_buf
 		use_len = ( datalen > hlen ) ? hlen : datalen;
@@ -478,13 +504,13 @@ int mbedtls_pkcs12_derivation_simd1( unsigned char *data[SSE_GROUP_SZ_SHA1], siz
 
 		for (k = 0; k< SSE_GROUP_SZ_SHA1; ++k) {
 			// B += 1
-			for( i = v; i > 0; i-- )
-				if( ++hash_block[k][i - 1] != 0 )
+			for ( i = v; i > 0; i-- )
+				if ( ++hash_block[k][i - 1] != 0 )
 					break;
 
 			// salt_block += B
 			c = 0;
-			for( i = v; i > 0; i-- )
+			for ( i = v; i > 0; i-- )
 			{
 				j = salt_block[k][i - 1] + hash_block[k][i - 1] + c;
 				c = (unsigned char) (j >> 8);
@@ -493,7 +519,7 @@ int mbedtls_pkcs12_derivation_simd1( unsigned char *data[SSE_GROUP_SZ_SHA1], siz
 
 			// pwd_block  += B
 			c = 0;
-			for( i = v; i > 0; i-- )
+			for ( i = v; i > 0; i-- )
 			{
 				j = pwd_block[k][i - 1] + hash_block[k][i - 1] + c;
 				c = (unsigned char) (j >> 8);
@@ -516,7 +542,7 @@ static int mbedtls_pkcs12_derivation_simd_sha256( unsigned char *data[SSE_GROUP_
 	unsigned char hash_output_[SSE_GROUP_SZ_SHA256][128], *hash_output[SSE_GROUP_SZ_SHA256], hash[128];
 	unsigned char *p;
 	unsigned char c;
-	JTR_ALIGN(MEM_ALIGN_SIMD) unsigned char sse_buf[SHA_BUF_SIZ*sizeof(ARCH_WORD_32)*SSE_GROUP_SZ_SHA256];
+	JTR_ALIGN(MEM_ALIGN_SIMD) unsigned char sse_buf[SHA_BUF_SIZ*sizeof(uint32_t)*SSE_GROUP_SZ_SHA256];
 
 	size_t hlen, use_len, v, v2, i;
 
@@ -546,7 +572,7 @@ static int mbedtls_pkcs12_derivation_simd_sha256( unsigned char *data[SSE_GROUP_
 
 			SHA256_Update( &md_ctx, diversifier, v );
 			SHA256_Update( &md_ctx, salt_block[k], v );
-			v2 = ((pwdlen[k]+64)/64)*64;
+			v2 = ((pwdlen[k]+64-1)/64)*64;
 			SHA256_Update( &md_ctx, pwd_block[k], v2 );
 			SHA256_Final( hash, &md_ctx );
 			for (i = 0; i < SHA256_DIGEST_LENGTH; ++i) {
@@ -557,8 +583,8 @@ static int mbedtls_pkcs12_derivation_simd_sha256( unsigned char *data[SSE_GROUP_
 		}
 
 		// Perform remaining ( iterations - 1 ) recursive hash calculations
-		for( i = 1; i < (size_t) iterations; i++ )
-			SIMDSHA256body(sse_buf, (ARCH_WORD_32*)sse_buf, NULL, SSEi_MIXED_IN|SSEi_OUTPUT_AS_INP_FMT);
+		for ( i = 1; i < (size_t) iterations; i++ )
+			SIMDSHA256body(sse_buf, (uint32_t*)sse_buf, NULL, SSEi_MIXED_IN|SSEi_OUTPUT_AS_INP_FMT);
 
 		// Now unmarshall the data from sse_buf
 		use_len = ( datalen > hlen ) ? hlen : datalen;
@@ -588,13 +614,13 @@ static int mbedtls_pkcs12_derivation_simd_sha256( unsigned char *data[SSE_GROUP_
 
 		for (k = 0; k< SSE_GROUP_SZ_SHA256; ++k) {
 			// B += 1
-			for( i = v; i > 0; i-- )
-				if( ++hash_block[k][i - 1] != 0 )
+			for ( i = v; i > 0; i-- )
+				if ( ++hash_block[k][i - 1] != 0 )
 					break;
 
 			// salt_block += B
 			c = 0;
-			for( i = v; i > 0; i-- )
+			for ( i = v; i > 0; i-- )
 			{
 				j = salt_block[k][i - 1] + hash_block[k][i - 1] + c;
 				c = (unsigned char) (j >> 8);
@@ -603,7 +629,7 @@ static int mbedtls_pkcs12_derivation_simd_sha256( unsigned char *data[SSE_GROUP_
 
 			// pwd_block  += B
 			c = 0;
-			for( i = v; i > 0; i-- )
+			for ( i = v; i > 0; i-- )
 			{
 				j = pwd_block[k][i - 1] + hash_block[k][i - 1] + c;
 				c = (unsigned char) (j >> 8);
@@ -638,9 +664,9 @@ int pkcs12_pbe_derive_key_simd_sha512(int iterations, int id, const unsigned cha
 
 		unipwd[j] = unipwd_[j];
 		cpo = (unsigned char*)unipwd[j];
-		if( len > PKCS12_MAX_PWDLEN )
+		if ( len > PKCS12_MAX_PWDLEN )
 			return -1;
-		for( i = 0; i < len; i++ ) {
+		for ( i = 0; i < len; i++ ) {
 			*cpo++ = 0;
 			*cpo++ = *cpi++;
 		}
@@ -663,14 +689,14 @@ int mbedtls_pkcs12_derivation_simd_sha512( unsigned char *data[SSE_GROUP_SZ_SHA5
 	unsigned char hash_output_[SSE_GROUP_SZ_SHA512][128], *hash_output[SSE_GROUP_SZ_SHA512], hash[128];
 	unsigned char *p;
 	unsigned char c;
-	JTR_ALIGN(MEM_ALIGN_SIMD) unsigned char sse_buf[SHA_BUF_SIZ*sizeof(ARCH_WORD_64)*SSE_GROUP_SZ_SHA512];
+	JTR_ALIGN(MEM_ALIGN_SIMD) unsigned char sse_buf[SHA_BUF_SIZ*sizeof(uint64_t)*SSE_GROUP_SZ_SHA512];
 
 	size_t hlen, use_len, v, i;
 
 	SHA512_CTX md_ctx;
 
 	// This version only allows max of 64 bytes of password or salt
-	if( datalen > 128 || saltlen > 64 )
+	if ( datalen > 128 || saltlen > 64 )
 		return -1;
 	for (j = 0; j < SSE_GROUP_SZ_SHA512; ++j) {
 		pwd_block[j] = pwd_block_[j];
@@ -706,8 +732,8 @@ int mbedtls_pkcs12_derivation_simd_sha512( unsigned char *data[SSE_GROUP_SZ_SHA5
 		}
 
 		// Perform remaining ( iterations - 1 ) recursive hash calculations
-		for( i = 1; i < (size_t) iterations; i++ )
-			SIMDSHA512body(sse_buf, (ARCH_WORD_64*)sse_buf, NULL, SSEi_MIXED_IN|SSEi_OUTPUT_AS_INP_FMT);
+		for ( i = 1; i < (size_t) iterations; i++ )
+			SIMDSHA512body(sse_buf, (uint64_t*)sse_buf, NULL, SSEi_MIXED_IN|SSEi_OUTPUT_AS_INP_FMT);
 
 		// Now unmarshall the data from sse_buf
 		use_len = ( datalen > hlen ) ? hlen : datalen;
@@ -737,13 +763,13 @@ int mbedtls_pkcs12_derivation_simd_sha512( unsigned char *data[SSE_GROUP_SZ_SHA5
 
 		for (k = 0; k< SSE_GROUP_SZ_SHA512; ++k) {
 			// B += 1
-			for( i = v; i > 0; i-- )
-				if( ++hash_block[k][i - 1] != 0 )
+			for ( i = v; i > 0; i-- )
+				if ( ++hash_block[k][i - 1] != 0 )
 					break;
 
 			// salt_block += B
 			c = 0;
-			for( i = v; i > 0; i-- )
+			for ( i = v; i > 0; i-- )
 			{
 				j = salt_block[k][i - 1] + hash_block[k][i - 1] + c;
 				c = (unsigned char) (j >> 8);
@@ -752,7 +778,7 @@ int mbedtls_pkcs12_derivation_simd_sha512( unsigned char *data[SSE_GROUP_SZ_SHA5
 
 			// pwd_block  += B
 			c = 0;
-			for( i = v; i > 0; i-- )
+			for ( i = v; i > 0; i-- )
 			{
 				j = pwd_block[k][i - 1] + hash_block[k][i - 1] + c;
 				c = (unsigned char) (j >> 8);

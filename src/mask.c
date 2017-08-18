@@ -213,7 +213,7 @@ static char* plhdr2string(char p, int fmt_case)
 
 	/*
 	 * Force lowercase for case insignificant formats. Dupes will
-	 * be removed, so eg. ?l?u == ?l.
+	 * be removed, so e.g. ?l?u == ?l.
 	 */
 	if (!fmt_case) {
 		if (p == 'u')
@@ -640,15 +640,21 @@ static char* plhdr2string(char p, int fmt_case)
 		break;
 
 	case 'B': /* All high-bit */
-
-	case 'h': /* deprecated alias for B */
 		add_range(0x80, 0xff);
 		break;
 
 	case 'b': /* All (except NULL which we can't handle) */
-
-	case 'H': /* deprecated alias for b */
 		add_range(0x01, 0xff);
+		break;
+
+	case 'h': /* Lower-case hex */
+		add_range('0', '9');
+		add_range('a', 'f');
+		break;
+
+	case 'H': /* Upper-case hex */
+		add_range('0', '9');
+		add_range('A', 'F');
 		break;
 
 	case 'a': /* Printable ASCII */
@@ -931,7 +937,7 @@ static char* plhdr2string(char p, int fmt_case)
  * brackets are already given, as in [?d], output is still [0123456789]
  *
  * This function must pass any escaped characters on, as-is (still escaped).
- * It may also have to ADD escapes to ranges produced from eg. ?s.
+ * It may also have to ADD escapes to ranges produced from e.g. ?s.
  */
 static char* expand_plhdr(char *string, int fmt_case)
 {
@@ -1924,7 +1930,7 @@ char *stretch_mask(char *mask, mask_parsed_ctx *parsed_mask)
 			if (!k) j--;
 		}
 		if (mask[i] == '\\') {
-			if(!k) j++;
+			if (!k) j++;
 			strnzcpy(stretched_mask + j, mask + i, 3);
 			j += 2;
 		}
@@ -1980,7 +1986,7 @@ char *stretch_mask(char *mask, mask_parsed_ctx *parsed_mask)
  * Note that de-hex comes after UTF-8 conversion so any 8-bit hex escaped
  * characters will be parsed as the *internal* encoding.
  *
- * Hex characters *can* compose ranges, eg. "\x80-\xff", but can not end up as
+ * Hex characters *can* compose ranges, e.g. "\x80-\xff", but can not end up as
  * placeholders. Eg. "\x3fd" ("?d" after de-hex) must be parsed literally as
  * "?d" and not a digits range.
  *

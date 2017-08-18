@@ -96,7 +96,7 @@ static struct fmt_tests ripemd_128_tests[] = {
 };
 
 static char (*saved_key)[PLAINTEXT_LENGTH + 1];
-static ARCH_WORD_32 (*crypt_out)[BINARY_SIZE160 / sizeof(ARCH_WORD_32)];
+static uint32_t (*crypt_out)[BINARY_SIZE160 / sizeof(uint32_t)];
 
 static void init(struct fmt_main *self)
 {
@@ -132,7 +132,7 @@ static int valid(char *ciphertext, struct fmt_main *self, int len)
 		return 0;
 
 	while(*p)
-		if(atoi16[ARCH_INDEX(*p++)]==0x7f)
+		if (atoi16[ARCH_INDEX(*p++)]==0x7f)
 			return 0;
 
 	return 1;

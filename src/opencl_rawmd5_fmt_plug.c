@@ -254,7 +254,8 @@ static char *prepare(char *fields[10], struct fmt_main *self)
 {
 	static char out[CIPHERTEXT_LENGTH + 1];
 
-	if (!strncmp(fields[1], FORMAT_TAG2, FORMAT_TAG2_LEN) && strlen(fields[1]) == FORMAT_TAG2_LEN+24) {
+	if (!strncmp(fields[1], FORMAT_TAG2, FORMAT_TAG2_LEN) &&
+	    strlen(fields[1]) == FORMAT_TAG2_LEN + 24) {
 		int res;
 
 		res = base64_convert(&fields[1][FORMAT_TAG2_LEN], e_b64_mime, 24,
@@ -329,7 +330,7 @@ static void clear_keys(void)
 
 static void set_key(char *_key, int index)
 {
-	const ARCH_WORD_32 *key = (ARCH_WORD_32*)_key;
+	const uint32_t *key = (uint32_t*)_key;
 	int len = strlen(_key);
 
 	if (mask_int_cand.num_int_cand > 1 && !mask_gpu_is_static) {

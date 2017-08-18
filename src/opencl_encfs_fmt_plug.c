@@ -14,6 +14,7 @@ extern struct fmt_main fmt_opencl_encfs;
 john_register_one(&fmt_opencl_encfs);
 #else
 
+#include <stdint.h>
 #include <string.h>
 #include <openssl/opensslv.h>
 #include <openssl/crypto.h>
@@ -22,15 +23,14 @@ john_register_one(&fmt_opencl_encfs);
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 #include <openssl/engine.h>
-#include "common-opencl.h"
 #ifdef _OPENMP
 #include <omp.h>
 #endif
 
+#include "common-opencl.h"
 #include "arch.h"
 #include "formats.h"
 #include "common.h"
-#include "stdint.h"
 #include "encfs_common.h"
 #include "options.h"
 #include "misc.h"
@@ -76,7 +76,6 @@ static unsigned int *inbuffer;
 static pbkdf2_out *output;
 static pbkdf2_salt currentsalt;
 static cl_mem mem_in, mem_out, mem_salt, mem_state;
-static size_t key_buf_size;
 static int new_keys;
 static struct fmt_main *self;
 
@@ -123,7 +122,7 @@ static void create_clobj(size_t gws, struct fmt_main *self)
 {
 	gws *= ocl_v_width;
 
-	key_buf_size = 64 * gws;
+	key_buf_size = PLAINTEXT_LENGTH * gws;
 
 	/// Allocate memory
 	inbuffer = mem_calloc(1, key_buf_size);

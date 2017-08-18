@@ -61,7 +61,7 @@ static int omp_t = 1;
 #define PLAINTEXT_LENGTH	8
 #define BINARY_SIZE		16
 #define SALT_SIZE		sizeof(struct custom_salt)
-#define BINARY_ALIGN	sizeof(ARCH_WORD_32)
+#define BINARY_ALIGN	sizeof(uint32_t)
 #define SALT_ALIGN		1
 #define MIN_KEYS_PER_CRYPT	1
 #define MAX_KEYS_PER_CRYPT	1
@@ -125,13 +125,13 @@ static struct fmt_tests vnc_tests[] = {
 };
 
 static struct custom_salt {
-	char unsigned challenge[16];
-	char unsigned response[16];
+	unsigned char challenge[16];
+	unsigned char response[16];
 } *cur_salt;
 
 static char (*saved_key)[PLAINTEXT_LENGTH + 1];
 static unsigned char (*des_key)[PLAINTEXT_LENGTH];
-static ARCH_WORD_32 (*crypt_out)[BINARY_SIZE / sizeof(ARCH_WORD_32)];
+static uint32_t (*crypt_out)[BINARY_SIZE / sizeof(uint32_t)];
 static void init(struct fmt_main *self)
 {
 
@@ -252,7 +252,7 @@ static int crypt_all(int *pcount, struct db_salt *salt)
 		DES_set_key_unchecked(&des_key[index], &schedule);
 		/* do encryption (switched to ECB crypting) */
 		DES_ecb_encrypt((const_DES_cblock *)cur_salt->challenge, (DES_cblock*)&encrypted_challenge[0], &schedule, DES_ENCRYPT);
-		if(memcmp(encrypted_challenge, cur_salt->response, 8) == 0) {
+		if (memcmp(encrypted_challenge, cur_salt->response, 8) == 0) {
 			DES_ecb_encrypt((const_DES_cblock *)&cur_salt->challenge[8], (DES_cblock*)&encrypted_challenge[8], &schedule, DES_ENCRYPT);
 			memcpy((unsigned char*)crypt_out[index], encrypted_challenge, 16);
 		} else {

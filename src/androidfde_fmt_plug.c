@@ -33,12 +33,18 @@ john_register_one(&fmt_fde);
 #include <assert.h>
 #include <errno.h>
 #include "os.h"
-#include "stdint.h"
+#include <stdint.h>
 #include <stdlib.h>
 #include <sys/types.h>
-#include "aes.h"
-
 #include <string.h>
+#ifdef _OPENMP
+static int omp_t = 1;
+#include <omp.h>
+#ifndef OMP_SCALE
+#define OMP_SCALE           1
+#endif
+#endif
+
 #include "arch.h"
 #include "johnswap.h"
 #include "misc.h"
@@ -48,15 +54,8 @@ john_register_one(&fmt_fde);
 #include "options.h"
 #include "memory.h"
 #include "pbkdf2_hmac_sha1.h"
-// NOTE, this format FAILS for generic sha2.  It could be due to interaction between openssl/aes and generic sha2 code.
+#include "aes.h"
 #include "sha2.h"
-#ifdef _OPENMP
-static int omp_t = 1;
-#include <omp.h>
-#ifndef OMP_SCALE
-#define OMP_SCALE           1
-#endif
-#endif
 #include "memdbg.h"
 
 #define FORMAT_TAG          "$fde$"
@@ -250,13 +249,13 @@ void hash_plugin_check_hash(int index)
 	int lens[SSE_GROUP_SZ_SHA1], i;
 	unsigned char *pin[SSE_GROUP_SZ_SHA1];
 	union {
-		ARCH_WORD_32 *pout[SSE_GROUP_SZ_SHA1];
+		uint32_t *pout[SSE_GROUP_SZ_SHA1];
 		unsigned char *poutc;
 	} x;
 	for (i = 0; i < SSE_GROUP_SZ_SHA1; ++i) {
 		lens[i] = strlen(saved_key[index+i]);
 		pin[i] = (unsigned char*)saved_key[index+i];
-		x.pout[i] = (ARCH_WORD_32*)(Keycandidate[i]);
+		x.pout[i] = (uint32_t*)(Keycandidate[i]);
 	}
 	pbkdf2_sha1_sse((const unsigned char **)pin, lens, cur_salt->salt, 16,
 		2000, &(x.poutc), cur_salt->keysize + 16, 0);
@@ -365,7 +364,7 @@ struct fmt_main fmt_fde = {
 		SALT_ALIGN,
 		MIN_KEYS_PER_CRYPT,
 		MAX_KEYS_PER_CRYPT,
-		FMT_CASE | FMT_8_BIT | FMT_OMP,
+		FMT_CASE | FMT_8_BIT | FMT_OMP | FMT_HUGE_INPUT,
 		{ NULL },
 		{ FORMAT_TAG },
 		fde_tests
@@ -381,7 +380,7 @@ struct fmt_main fmt_fde = {
 		{ NULL },
 		fmt_default_source,
 		{
-			fmt_default_binary_hash /* Not usable with $SOURCE_HASH$ */
+			fmt_default_binary_hash
 		},
 		fmt_default_salt_hash,
 		NULL,
@@ -391,7 +390,7 @@ struct fmt_main fmt_fde = {
 		fmt_default_clear_keys,
 		crypt_all,
 		{
-			fmt_default_get_hash /* Not usable with $SOURCE_HASH$ */
+			fmt_default_get_hash
 		},
 		cmp_all,
 		cmp_one,

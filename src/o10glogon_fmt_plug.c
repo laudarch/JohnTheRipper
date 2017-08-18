@@ -24,15 +24,6 @@ john_register_one(&fmt_o10glogon);
 
 #include <string.h>
 #include <openssl/des.h>
-#include <openssl/aes.h>
-
-#include "arch.h"
-#include "misc.h"
-#include "common.h"
-#include "formats.h"
-#include "md5.h"
-#include "unicode.h"
-#include "base64_convert.h"
 #ifdef _OPENMP
 static int omp_t = 1;
 #include <omp.h>
@@ -41,6 +32,14 @@ static int omp_t = 1;
 #endif
 #endif
 
+#include "arch.h"
+#include "misc.h"
+#include "common.h"
+#include "formats.h"
+#include "aes.h"
+#include "md5.h"
+#include "unicode.h"
+#include "base64_convert.h"
 #include "memdbg.h"
 
 #define FORMAT_LABEL                    "o10glogon"
@@ -313,7 +312,7 @@ static int crypt_all(int *pcount, struct db_salt *salt)
 	{
 		unsigned char buf[256], buf1[256];
 		unsigned int l;
-		ARCH_WORD_32 iv[2];
+		uint32_t iv[2];
 		DES_key_schedule desschedule2;
 
 		l = cur_salt->userlen + cur_key_len[idx];

@@ -135,13 +135,13 @@ static int valid(char *ciphertext, struct fmt_main *self)
 	if (!isdec(p))
 		goto err;
 	saltlen = atoi(p);
-	if(saltlen > SALTLEN)
+	if (saltlen > SALTLEN)
 		goto err;
 	if ((p = strtokm(NULL, "*")) == NULL)	/* salt */
 		goto err;
-	if(strlen(p) != saltlen * 2)
+	if (strlen(p) != saltlen * 2)
 		goto err;
-	if(!ishexlc(p))
+	if (!ishexlc(p))
 		goto err;
 	if ((p = strtokm(NULL, "*")) == NULL)	/* ct length */
 		goto err;
@@ -152,9 +152,9 @@ static int valid(char *ciphertext, struct fmt_main *self)
 		goto err;
 	if ((p = strtokm(NULL, "*")) == NULL)	/* ciphertext */
 		goto err;
-	if(strlen(p) != ctlen * 2)
+	if (strlen(p) != ctlen * 2)
 		goto err;
-	if(!ishexlc(p))
+	if (!ishexlc(p))
 		goto err;
 
 	MEM_FREE(keeptr);
@@ -247,7 +247,7 @@ static int crypt_all(int *pcount, struct db_salt *salt)
 		}
 		pbkdf2_sha1_sse((const unsigned char **)pin, lens, cur_salt->salt[0], cur_salt->saltlen[0], cur_salt->iterations[0], pout, 16, 0);
 		for (i = 0; i < MAX_KEYS_PER_CRYPT; ++i) {
-			if(akcdecrypt(master[i], cur_salt->ct[0]) == 0)
+			if (akcdecrypt(master[i], cur_salt->ct[0]) == 0)
 				cracked[i+index] = 1;
 			else
 				cracked[i+index] = 0;
@@ -258,7 +258,7 @@ static int crypt_all(int *pcount, struct db_salt *salt)
 		       strlen(saved_key[index]),
 		       cur_salt->salt[0], cur_salt->saltlen[0],
 		       cur_salt->iterations[0], master, 16, 0);
-		if(akcdecrypt(master, cur_salt->ct[0]) == 0)
+		if (akcdecrypt(master, cur_salt->ct[0]) == 0)
 			cracked[index] = 1;
 		else
 			cracked[index] = 0;
@@ -324,7 +324,7 @@ struct fmt_main fmt_agile_keychain = {
 		SALT_ALIGN,
 		MIN_KEYS_PER_CRYPT,
 		MAX_KEYS_PER_CRYPT,
-		FMT_CASE | FMT_8_BIT | FMT_OMP | FMT_NOT_EXACT,
+		FMT_CASE | FMT_8_BIT | FMT_OMP | FMT_NOT_EXACT | FMT_HUGE_INPUT,
 		{
 			"iteration count",
 		},
@@ -344,7 +344,7 @@ struct fmt_main fmt_agile_keychain = {
 		},
 		fmt_default_source,
 		{
-			fmt_default_binary_hash /* Not usable with $SOURCE_HASH$ */
+			fmt_default_binary_hash
 		},
 		fmt_default_salt_hash,
 		NULL,
@@ -354,7 +354,7 @@ struct fmt_main fmt_agile_keychain = {
 		fmt_default_clear_keys,
 		crypt_all,
 		{
-			fmt_default_get_hash /* Not usable with $SOURCE_HASH$ */
+			fmt_default_get_hash
 		},
 		cmp_all,
 		cmp_one,

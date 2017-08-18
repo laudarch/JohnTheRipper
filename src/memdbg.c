@@ -46,7 +46,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "common.h"
-#define __MEMDBG__
+#define __MEMDBG_C_FILE__
 #include "memdbg.h"
 #include "pseudo_intrinsics.h"
 #include "jumbo.h"
@@ -117,9 +117,9 @@ typedef struct _hdr {
 /* points to just 'right' after allocated memory, for overflow catching */
 	MEMDBG_HDR2 *mdbg_hdr2;
 	const char  *mdbg_file;
-	ARCH_WORD_32 mdbg_line;
-	ARCH_WORD_32 mdbg_cnt;
-	ARCH_WORD_32 mdbg_size;
+	uint32_t mdbg_line;
+	uint32_t mdbg_cnt;
+	uint32_t mdbg_size;
 } MEMDBG_HDR;
 
 static size_t   mem_size = 0;
@@ -238,7 +238,7 @@ void MemDbg_Display(FILE *fp) {
 				cp = (char*)p->mdbg_hdr2->mdbg_fpst;
 				cp -= 16;
 				for (i = 0; i < 20; ++i) {
-					if(*cp < ' ' || *cp > '~')
+					if (*cp < ' ' || *cp > '~')
 						fprintf(fp, ".");
 					else
 						fprintf(fp, "%c", *cp);
@@ -252,7 +252,7 @@ void MemDbg_Display(FILE *fp) {
 			char *cp = ((char*)p)+RESERVE_SZ;
 			fprintf(fp, "  ");
 			for (i = 0; i < 20 && i < p->mdbg_size; ++i) {
-				if(*cp < ' ' || *cp > '~')
+				if (*cp < ' ' || *cp > '~')
 					fprintf(fp, ".");
 				else
 					fprintf(fp, "%c", *cp);

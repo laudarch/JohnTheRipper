@@ -69,13 +69,14 @@ AC_ARG_ENABLE([asan], [AS_HELP_STRING([--enable-asan], [* Build with AddressSani
 AC_ARG_ENABLE([ubsan], [AS_HELP_STRING([--enable-ubsan], [* Build with UndefinedBehaviorSanitizer])], [ubsan=$enableval], [ubsan=no])
 AC_ARG_ENABLE([plugin-dependencies], [AS_HELP_STRING([--disable-plugin-dependencies], [Do not create best-effort Makefile dependencies for plugins])], [plug_deps=$enableval], [plug_deps=yes])
 
+AC_ARG_ENABLE([werror], [AS_HELP_STRING([--enable-werror], [Treat warnings as errors])], [werror=$enableval], [werror=no])
+
 # Define Features. OpenMP and OpenCL are defined in their respective macros.
 # We define "--disable-FEATURE" when default is "auto".
 # MPI is not "auto" because its network usage might scare people:
 AC_ARG_ENABLE([openmp-for-fast-formats], [AC_HELP_STRING([--enable-openmp-for-fast-formats], [Enable OpenMP for fast formats (usually a bad idea - use fork instead)])], [ompfast=$enableval], [ompfast=no])
 AC_ARG_ENABLE([mpi], [AC_HELP_STRING([--enable-mpi], [Use OpenMPI])], [enable_mpi=$enableval], [enable_mpi=no])
 AC_ARG_ENABLE([rexgen], [AC_HELP_STRING([--disable-rexgen], [Disable use of rexgen library])], [enable_rexgen=$enableval], [enable_rexgen=auto])
-AC_ARG_ENABLE([cuda], [AC_HELP_STRING([--enable-cuda], [Use CUDA even if OpenCL was found too])], [enable_cuda=$enableval], [enable_cuda=auto])
 AC_ARG_ENABLE([pcap], [AC_HELP_STRING([--disable-pcap], [Do not build helpers depending on PCAP])], [enable_pcap=$enableval], [enable_pcap=auto])
 AC_ARG_ENABLE([native-tests], [AC_HELP_STRING([--disable-native-tests], [Do not test build system for target features. Implies --disable-native-march.])], [enable_native_tests=$enableval], [enable_native_tests=auto])
 AC_ARG_ENABLE([native-march], [AC_HELP_STRING([--disable-native-march], [Do not use things like -march=native even if valid compiler option(s). Native tests still can be run in this mode])], [enable_native_march=$enableval], [enable_native_march=auto])
@@ -85,6 +86,7 @@ AC_ARG_ENABLE([nt-full-unicode], [AS_HELP_STRING([--enable-nt-full-unicode],[sup
 AC_ARG_ENABLE([int128], [AC_HELP_STRING([--disable-int128], [Do not use int128])], [enable_int128=$enableval], [enable_int128=auto])
 AC_ARG_ENABLE([experimental-code], [AC_HELP_STRING([--enable-experimental-code], [Use experimental code])], [experimental=$enableval], [experimental=no])
 AC_ARG_ENABLE([fuzz], [AC_HELP_STRING([--enable-fuzz], [Fuzzing prepare(), valid(), init(), etc])], [fuzz=$enableval], [fuzz=no])
+AC_ARG_ENABLE([libfuzzer], [AC_HELP_STRING([--enable-libfuzzer], [Fuzzing using libFuzzer])], [libfuzzer=$enableval], [libfuzzer=no])
 
 ####### Actual tests start here #######
 
@@ -222,6 +224,10 @@ fi
    CFLAGS_EX=""
    JTR_FLAG_CHECK([-Wall], 1)
    JTR_FLAG_CHECK([-Wdeclaration-after-statement], 1)
+
+if test "x$werror" = xyes ; then
+   JTR_FLAG_CHECK([-Werror], 1)
+fi
 if test "x$asan" = xyes || test "x$ubsan" = xyes ; then
    JTR_FLAG_CHECK([-fno-omit-frame-pointer], 1)
 else
@@ -460,7 +466,7 @@ else
          JTR_SET_NORMAL_SSL_INCLUDES([/usr/local/ssl])
 	   fi]
       [AC_CHECK_HEADER([openssl/opensslv.h],
-	   [AC_CHECK_LIB([ssl],[SSL_library_init],
+	   [AC_CHECK_LIB([ssl],[SSL_CTX_new],
 	    [AC_CHECK_LIB([crypto],[MD5_Update],
 	       [AC_DEFINE(HAVE_LIBSSL,1,[Define to 1 if you have the `ssl' library (-lssl).])]
 	       [AC_DEFINE(HAVE_LIBCRYPTO,1,[Define to 1 if you have the `crypto' library (-lcrypto).])]
@@ -509,7 +515,7 @@ using_rexgen=no
 if test "x$enable_rexgen" != xno ; then
   AC_CHECK_HEADER([librexgen/version.h],
     [AC_SEARCH_LIBS([rexgen_version_int],[rexgen librexgen],
-      [AC_MSG_CHECKING([librexgen minimum version])] && [AC_TRY_RUN([int main() { return ! (rexgen_version_int() >= 0x010400); }],
+      [AC_MSG_CHECKING([librexgen minimum version])] && [AC_TRY_RUN([int main() { return ! (rexgen_version_int() >= 0x020006); }],
         AC_MSG_RESULT([usable]) && [using_rexgen=yes],
 		AC_MSG_RESULT([TOO old. Rexgen not usable!]))]
     )]
@@ -567,13 +573,9 @@ CFLAGS_ORIG="$CFLAGS"
 LIBS="$OPENSSL_LIBS $COMMONCRYPTO_LIBS $LIBS"
 CFLAGS="$OPENSSL_CFLAGS $CFLAGS"
 AS_IF([test "$with_commoncrypto" = yes], [AC_DEFINE([HAVE_SHA256],1,[Define to 1 if you have the `SHA256' function.])])
-AC_CHECK_FUNCS([EVP_aes_256_xts SHA256 WHIRLPOOL RIPEMD160 AES_encrypt EVP_sha512 BIO_new])
+AC_CHECK_FUNCS([SHA256 WHIRLPOOL RIPEMD160 AES_encrypt])
 LIBS="$LIBS_ORIG"
 CFLAGS="$CFLAGS_ORIG"
-
-if test "x$ac_cv_func_BIO_new" = xyes ; then
-	AC_SUBST([HAVE_BIO_NEW],[-DHAVE_BIO_NEW])
-fi
 
 AC_CACHE_SAVE
 
@@ -593,22 +595,16 @@ if test "x$CL_LIBS" = x; then
 else
    using_cl=yes
    HAVE_OPENCL=-DHAVE_OPENCL
-   if test x$enable_cuda = xauto; then
-      enable_cuda=no
-   fi
 fi
 
 # ZTEX USB-FPGA module support (if --enable-ztex=yes)
 AX_ZTEX
 
-# Check for CUDA, including headers.
-JTR_CUDA
-
 # Checks for header files.
 # Eg. if sys/times.h is found, the below will define HAVE_SYS_TIMES_H
 AC_CHECK_HEADERS([arpa/inet.h crypt.h dirent.h fcntl.h limits.h locale.h \
                   malloc.h net/ethernet.h netdb.h netinet/in.h \
-                  netinet/in_systm.h stdint.h string.h strings.h \
+                  netinet/in_systm.h string.h strings.h \
                   sys/ethernet.h sys/file.h sys/param.h sys/socket.h \
                   sys/time.h sys/times.h sys/types.h termios.h \
                   unistd.h unixlib/local.h windows.h])
@@ -891,6 +887,13 @@ else
    AC_MSG_NOTICE([Fuzz check disabled])
 fi
 
+# In makefile, we need to know if building with libFuzzer.
+if test "x$libfuzzer" != xno ; then
+   AC_SUBST(HAVE_LIBFUZZER,[-DHAVE_LIBFUZZER])
+else
+   AC_MSG_NOTICE([Fuzzing (using libFuzzer) check disabled])
+fi
+
 # code to create M4_INCLUDES (all ./m4/*.m4 )
 AC_SUBST([M4_INCLUDES],[`echo m4/*.m4`])
 
@@ -936,6 +939,7 @@ AC_CONFIG_FILES([Makefile
                  aes/Makefile
                  aes/aesni/Makefile
                  aes/openssl/Makefile
+                 secp256k1/Makefile
                  escrypt/Makefile])
 AC_OUTPUT(,echo "timestamp from configure.in" > autoconfig-stamp-h)
 
@@ -947,7 +951,7 @@ AC_OUTPUT(,echo "timestamp from configure.in" > autoconfig-stamp-h)
 echo "configure: creating ./fmt_externs.h"
 rm -f fmt_externs.h
 if test "`echo *_fmt_plug.c`" != "*_fmt_plug.c"; then
-   $CPP -P -DAC_BUILT $CPPFLAGS $CPU_BEST_FLAGS $CFLAGS $HAVE_OPENCL $HAVE_CUDA $CFLAGS_EXTRA $OPENMP_CFLAGS $OPENSSL_CFLAGS -DFMT_EXTERNS_H *_fmt_plug.c | LC_ALL=C $GREP "extern struct fmt_main" | LC_ALL=C $SORT -f > fmt_externs.h
+   $CPP -P -DAC_BUILT $CPPFLAGS $CPU_BEST_FLAGS $CFLAGS $HAVE_OPENCL $CFLAGS_EXTRA $OPENMP_CFLAGS $OPENSSL_CFLAGS -DFMT_EXTERNS_H *_fmt_plug.c | LC_ALL=C $GREP "extern struct fmt_main" | LC_ALL=C $SORT -f > fmt_externs.h
 fi
 # if the file was not created, then bail.
 if test -f fmt_externs.h -a ! -s fmt_externs.h; then
@@ -974,10 +978,7 @@ if test ! -f fmt_registers.h; then
 fi
 
 if test "`echo opencl_*_fmt_plug.c`" != "opencl_*_fmt_plug.c"; then
-   $CPP -P -DAC_BUILT $CPPFLAGS $CPU_BEST_FLAGS $CFLAGS $HAVE_OPENCL $HAVE_CUDA $CFLAGS_EXTRA $OPENMP_CFLAGS $OPENSSL_CFLAGS -DFMT_REGISTERS_H opencl_*_fmt_plug.c | LC_ALL=C $GREP "john_register_one" | LC_ALL=C $SORT -f >> fmt_registers.h
-fi
-if test "`echo cuda_*_fmt_plug.c`" != "cuda_*_fmt_plug.c"; then
-   $CPP -P -DAC_BUILT $CPPFLAGS $CPU_BEST_FLAGS $CFLAGS $HAVE_OPENCL $HAVE_CUDA $CFLAGS_EXTRA $OPENMP_CFLAGS $OPENSSL_CFLAGS -DFMT_REGISTERS_H cuda_*_fmt_plug.c | LC_ALL=C $GREP "john_register_one" | LC_ALL=C $SORT -f >> fmt_registers.h
+   $CPP -P -DAC_BUILT $CPPFLAGS $CPU_BEST_FLAGS $CFLAGS $HAVE_OPENCL $CFLAGS_EXTRA $OPENMP_CFLAGS $OPENSSL_CFLAGS -DFMT_REGISTERS_H opencl_*_fmt_plug.c | LC_ALL=C $GREP "john_register_one" | LC_ALL=C $SORT -f >> fmt_registers.h
 fi
 
 ########################################################
@@ -1077,11 +1078,6 @@ else
    ubsan="disabled"
 fi
 
-if test x$using_cuda = xyes && test x$using_cl = xno; then
-   using_cuda="yes * NOTE: OpenCL is superior, *"
-   using_cl="no  *       even for NVIDIA     *"
-fi
-
 cat <<EOF
 dnl =======================================================================
 
@@ -1099,14 +1095,13 @@ Experimental code .......................... ${experimental}
 OpenMPI support (default disabled) ......... ${using_mpi}
 Fork support ............................... ${ac_cv_func_fork_works}
 OpenMP support ............................. ${using_omp}
-CUDA support (default disabled by OpenCL) .. ${using_cuda}
 OpenCL support ............................. ${using_cl}
 Generic crypt(3) format .................... ${using_crypt}
-Rexgen (extra cracking mode) ............... ${using_rexgen}
-GMP (PRINCE mode and faster SRP formats) ... ${ac_cv_lib_gmp___gmpz_init}
-PCAP (vncpcap2john and SIPdump) ............ ${using_pcap}
-Z (pkzip format, gpg2john) ................. ${using_zlib}
-BZ2 (gpg2john extra decompression logic) ... ${using_bz2}
+librexgen (regex cracking mode) ............ ${using_rexgen}
+libgmp (PRINCE mode and faster SRP formats)  ${ac_cv_lib_gmp___gmpz_init}
+libpcap (vncpcap2john and SIPdump) ......... ${using_pcap}
+libz (pkzip format, gpg2john) .............. ${using_zlib}
+libbz2 (gpg2john extra decompression logic)  ${using_bz2}
 128-bit integer (faster PRINCE mode) ....... ${have_int128}
 Memory map (share/page large files) ........ ${using_mmap}
 ZTEX USB-FPGA module 1.15y support ......... ${ztex}

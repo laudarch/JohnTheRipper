@@ -52,6 +52,7 @@ john_register_one(&fmt_episerver);
 #include "params.h"
 #include "options.h"
 #include "base64.h"
+#include "base64_convert.h"
 #include "unicode.h"
 #include "memdbg.h"
 
@@ -122,7 +123,7 @@ static uint32_t *saved_key;
 static uint32_t *crypt_out;
 #else
 static char (*saved_key)[3 * PLAINTEXT_LENGTH + 1];
-static ARCH_WORD_32 (*crypt_out)[BINARY_SIZE / sizeof(ARCH_WORD_32)];
+static uint32_t (*crypt_out)[BINARY_SIZE / sizeof(uint32_t)];
 #endif
 
 static struct custom_salt {
@@ -182,6 +183,8 @@ static void done(void)
 static int valid(char *ciphertext, struct fmt_main *self)
 {
 	char *ptr, *ctcopy, *keeptr;
+	size_t res;
+	char tmp[128];
 
 	if (strncmp(ciphertext, FORMAT_TAG, FORMAT_TAG_LEN))
 		return 0;
@@ -196,13 +199,27 @@ static int valid(char *ciphertext, struct fmt_main *self)
 	/* check version, must be '0' or '1' */
 	if (*ptr != '0' && *ptr != '1')
 		goto error;
-	if (!(ptr = strtokm(NULL, "*")))	/* salt */
+	if (!(ptr = strtokm(NULL, "*"))) /* salt */
 		goto error;
 	if (strlen(ptr) > 24)
+		goto error;
+	res = base64_valid_length(ptr, e_b64_mime, flg_Base64_MIME_TRAIL_EQ_CNT, 0);
+	if (res < strlen(ptr))
+		goto error;
+	res = base64_convert(ptr, e_b64_mime, strlen(ptr), tmp, e_b64_raw,
+                             sizeof(tmp), flg_Base64_MIME_TRAIL_EQ, 0);
+	if (res != 16) /* decoded salt size should be 16 bytes */
 		goto error;
 	if (!(ptr = strtokm(NULL, "*"))) /* hash */
 		goto error;
 	if (strlen(ptr) > 44)
+		goto error;
+	res = base64_valid_length(ptr, e_b64_mime, flg_Base64_MIME_TRAIL_EQ_CNT, 0);
+	if (res < strlen(ptr))
+		goto error;
+	res = base64_convert(ptr, e_b64_mime, strlen(ptr), tmp, e_b64_raw,
+                             sizeof(tmp), flg_Base64_MIME_TRAIL_EQ, 0);
+	if (res != 20 && res != 32) /* SHA1 or SHA256 output size */
 		goto error;
 	if ((ptr = strtokm(NULL, "*"))) /* end */
 		goto error;
@@ -292,9 +309,9 @@ static int crypt_all(int *pcount, struct db_salt *salt)
 		uint32_t *in = &saved_key[HASH_IDX_IN];
 		uint32_t *out = &crypt_out[HASH_IDX_OUT];
 
-		if(cur_salt->version == 0)
+		if (cur_salt->version == 0)
 			SIMDSHA1body(in, out, NULL, SSEi_MIXED_IN);
-		else if(cur_salt->version == 1)
+		else if (cur_salt->version == 1)
 			SIMDSHA256body(in, out, NULL, SSEi_MIXED_IN);
 	}
 #else
@@ -307,14 +324,14 @@ static int crypt_all(int *pcount, struct db_salt *salt)
 		if (len < 0)
 			len = strlen16((UTF16*)passwordBuf);
 		len <<= 1;
-		if(cur_salt->version == 0) {
+		if (cur_salt->version == 0) {
 			SHA_CTX ctx;
 			SHA1_Init(&ctx);
 			SHA1_Update(&ctx, cur_salt->esalt, EFFECTIVE_SALT_SIZE);
 			SHA1_Update(&ctx, passwordBuf, len);
 			SHA1_Final((unsigned char*)crypt_out[index], &ctx);
 		}
-		else if(cur_salt->version == 1) {
+		else if (cur_salt->version == 1) {
 			SHA256_CTX ctx;
 			SHA256_Init(&ctx);
 			SHA256_Update(&ctx, cur_salt->esalt, EFFECTIVE_SALT_SIZE);
@@ -333,7 +350,7 @@ static int cmp_all(void *binary, int count)
 #ifdef SIMD_COEF_32
 		if (*((uint32_t*)binary) == crypt_out[HASH_IDX_OUT])
 #else
-		if (*((ARCH_WORD_32*)binary) == crypt_out[index][0])
+		if (*((uint32_t*)binary) == crypt_out[index][0])
 #endif
 			return 1;
 	}
@@ -345,7 +362,7 @@ static int cmp_one(void *binary, int index)
 #if SIMD_COEF_32
 	return *((uint32_t*)binary) == crypt_out[HASH_IDX_OUT];
 #else
-	return (*((ARCH_WORD_32*)binary) == crypt_out[index][0]);
+	return (*((uint32_t*)binary) == crypt_out[index][0]);
 #endif
 }
 
@@ -358,12 +375,12 @@ static int cmp_exact(char *source, int index)
 	for (i = 0; i < BINARY_SIZE/4; ++i)
 		out[i] = crypt_out[HASH_IDX_OUT + i*SIMD_COEF_32];
 
-	if(cur_salt->version == 0)
+	if (cur_salt->version == 0)
 		return !memcmp(binary, out, 20);
 	else
 		return !memcmp(binary, out, BINARY_SIZE);
 #else
-	if(cur_salt->version == 0)
+	if (cur_salt->version == 0)
 		return !memcmp(binary, crypt_out[index], 20);
 	else
 		return !memcmp(binary, crypt_out[index], BINARY_SIZE);
@@ -573,7 +590,7 @@ static char *get_key(int index)
 	unsigned int i,s;
 
 	s = ((saved_key[HASH_IDX_IN + 15*SIMD_COEF_32] >> 3) - 16) >> 1;
-	for(i = 0; i < s; i++)
+	for (i = 0; i < s; i++)
 		out[i] = ((unsigned char*)saved_key)[GETPOS(16 + (i<<1), index)] | (((unsigned char*)saved_key)[GETPOS(16 + (i<<1) + 1, index)] << 8);
 	out[i] = 0;
 

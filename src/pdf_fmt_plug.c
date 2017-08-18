@@ -15,23 +15,24 @@ john_register_one(&fmt_pdf);
 #else
 
 #include <string.h>
-#include "arch.h"
-#include "params.h"
-#include "common.h"
-#include "formats.h"
-#include "misc.h"
-#include "md5.h"
-#include "rc4.h"
-#include "pdfcrack_md5.h"
-#include "aes.h"
-#include "sha2.h"
-#include "loader.h"
 #ifdef _OPENMP
 #include <omp.h>
 #ifndef OMP_SCALE
 #define OMP_SCALE               64
 #endif
 #endif
+
+#include "arch.h"
+#include "params.h"
+#include "common.h"
+#include "formats.h"
+#include "misc.h"
+#include "md5.h"
+#include "aes.h"
+#include "sha2.h"
+#include "rc4.h"
+#include "pdfcrack_md5.h"
+#include "loader.h"
 #include "memdbg.h"
 
 #define FORMAT_LABEL        "PDF"
@@ -126,7 +127,7 @@ static int valid(char *ciphertext, struct fmt_main *self)
 	char *p;
 	int res;
 
-	if (strncmp(ciphertext,  FORMAT_TAG, FORMAT_TAG_LEN) != 0)
+	if (strncmp(ciphertext,  FORMAT_TAG, FORMAT_TAG_LEN))
 		return 0;
 
 	ctcopy = strdup(ciphertext);
@@ -294,18 +295,11 @@ char * convert_old_to_new(char ciphertext[])
 
 static char *prepare(char *split_fields[10], struct fmt_main *self)
 {
-	// if it is the old format
-	if (strncmp(split_fields[1], FORMAT_TAG_OLD, FORMAT_TAG_OLD_LEN) == 0){
-		if(old_valid(split_fields[1], self)) {
-			char * in_new_format = convert_old_to_new(split_fields[1]);
-			// following line segfaults!
-			// strcpy(split_fields[1], in_new_format);
-			return in_new_format;
-		}else{
-			//Return something invalid
-			return "";
-		}
-	}
+	// Convert old format to new one
+	if (!strncmp(split_fields[1], FORMAT_TAG_OLD, FORMAT_TAG_OLD_LEN) &&
+	    old_valid(split_fields[1], self))
+		return convert_old_to_new(split_fields[1]);
+
 	return split_fields[1];
 }
 
@@ -624,7 +618,7 @@ static int crypt_all(int *pcount, struct db_salt *salt)
 		unsigned char output[32];
 		pdf_compute_user_password((unsigned char*)saved_key[index], output);
 		if (crypt_out->R == 2 || crypt_out->R == 5 || crypt_out->R == 6)
-			if(memcmp(output, crypt_out->u, 32) == 0) {
+			if (memcmp(output, crypt_out->u, 32) == 0) {
 				cracked[index] = 1;
 #ifdef _OPENMP
 #pragma omp atomic
@@ -632,7 +626,7 @@ static int crypt_all(int *pcount, struct db_salt *salt)
 				any_cracked |= 1;
 			}
 		if (crypt_out->R == 3 || crypt_out->R == 4)
-			if(memcmp(output, crypt_out->u, 16) == 0) {
+			if (memcmp(output, crypt_out->u, 16) == 0) {
 				cracked[index] = 1;
 #ifdef _OPENMP
 #pragma omp atomic

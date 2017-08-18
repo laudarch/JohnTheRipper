@@ -13,18 +13,18 @@ extern struct fmt_main fmt_opencl_odf;
 john_register_one(&fmt_opencl_odf);
 #else
 
+#include <stdint.h>
 #include <string.h>
-#include "sha.h"
 #include <openssl/blowfish.h>
-#include "aes.h"
 #ifdef _OPENMP
 #include <omp.h>
 #endif
 
 #include "arch.h"
+#include "sha.h"
+#include "aes.h"
 #include "formats.h"
 #include "common.h"
-#include "stdint.h"
 #include "misc.h"
 #include "options.h"
 #include "common.h"
@@ -64,7 +64,7 @@ typedef struct {
 } odf_salt;
 
 static char (*saved_key)[PLAINTEXT_LENGTH + 1];
-static ARCH_WORD_32 (*crypt_out)[32 / sizeof(ARCH_WORD_32)];
+static uint32_t (*crypt_out)[32 / sizeof(uint32_t)];
 
 typedef struct {
 	int cipher_type;
@@ -391,7 +391,7 @@ static int crypt_all(int *pcount, struct db_salt *salt)
 #ifdef _OPENMP
 #pragma omp parallel for
 #endif
-	for(index = 0; index < count; index++)
+	for (index = 0; index < count; index++)
 	{
 		unsigned char hash[20];
 		SHA_CTX ctx;
@@ -423,7 +423,7 @@ static int crypt_all(int *pcount, struct db_salt *salt)
 #ifdef _OPENMP
 #pragma omp parallel for
 #endif
-	for(index = 0; index < count; index++)
+	for (index = 0; index < count; index++)
 	{
 		BF_KEY bf_key;
 		SHA_CTX ctx;
@@ -476,7 +476,7 @@ struct fmt_main fmt_opencl_odf = {
 		SALT_ALIGN,
 		MIN_KEYS_PER_CRYPT,
 		MAX_KEYS_PER_CRYPT,
-		FMT_CASE | FMT_8_BIT | FMT_OMP,
+		FMT_CASE | FMT_8_BIT | FMT_OMP | FMT_HUGE_INPUT,
 		{ NULL },
 		{ FORMAT_TAG },
 		odf_tests
@@ -492,7 +492,7 @@ struct fmt_main fmt_opencl_odf = {
 		{ NULL },
 		fmt_default_source,
 		{
-			fmt_default_binary_hash /* Not usable with $SOURCE_HASH$ */
+			fmt_default_binary_hash
 		},
 		fmt_default_salt_hash,
 		NULL,
@@ -502,7 +502,7 @@ struct fmt_main fmt_opencl_odf = {
 		fmt_default_clear_keys,
 		crypt_all,
 		{
-			fmt_default_get_hash /* Not usable with $SOURCE_HASH$ */
+			fmt_default_get_hash
 		},
 		cmp_all,
 		cmp_one,

@@ -77,7 +77,7 @@ john_register_one(&fmt_qnx);
 
 static int (*saved_len);
 static char (*saved_key)[PLAINTEXT_LENGTH + 1];
-static ARCH_WORD_32 (*crypt_out)[BINARY_SIZE / sizeof(ARCH_WORD_32)];
+static uint32_t (*crypt_out)[BINARY_SIZE / sizeof(uint32_t)];
 
 #ifdef SIMD_COEF_32
 static int *(sk_by_len[PLAINTEXT_LENGTH+1]);
@@ -313,9 +313,9 @@ static int cmp_all(void *binary, int count)
 
 static int cmp_one(void *binary, int index)
 {
-	if(cur_salt->type == 5)
+	if (cur_salt->type == 5)
 		return !memcmp(binary, crypt_out[index], BINARY_SIZE_MD5);
-	if(cur_salt->type == 256)
+	if (cur_salt->type == 256)
 		return !memcmp(binary, crypt_out[index], BINARY_SIZE_SHA256);
 	return !memcmp(binary, crypt_out[index], BINARY_SIZE);
 }

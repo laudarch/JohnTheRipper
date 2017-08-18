@@ -80,23 +80,6 @@ void *encfs_common_get_salt(char *ciphertext)
 	ctcopy += FORMAT_TAG_LEN;
 	p = strtokm(ctcopy, "*");
 	cs.keySize = atoi(p);
-	switch(cs.keySize)
-	{
-		case 128:
-			cs.blockCipher = EVP_aes_128_cbc();
-			cs.streamCipher = EVP_aes_128_cfb();
-			break;
-
-		case 192:
-			cs.blockCipher = EVP_aes_192_cbc();
-			cs.streamCipher = EVP_aes_192_cfb();
-			break;
-		case 256:
-		default:
-			cs.blockCipher = EVP_aes_256_cbc();
-			cs.streamCipher = EVP_aes_256_cfb();
-			break;
-	}
 	cs.keySize = cs.keySize / 8;
 	p = strtokm(NULL, "*");
 	cs.iterations = atoi(p);
@@ -117,7 +100,7 @@ void *encfs_common_get_salt(char *ciphertext)
 			atoi16[ARCH_INDEX(p[i * 2])] * 16 +
 			atoi16[ARCH_INDEX(p[i * 2 + 1])];
 
-	cs.ivLength = EVP_CIPHER_iv_length( cs.blockCipher );
+	cs.ivLength = 16;
 	MEM_FREE(keeptr);
 	return (void *) &cs;
 }
@@ -136,7 +119,7 @@ void encfs_common_setIVec(encfs_common_custom_salt *cur_salt, unsigned char *ive
 
 	// combine ivec and seed with HMAC
 	memcpy(iv_and_seed, &key[cur_salt->keySize], cur_salt->ivLength);
-	for(i=0; i<8; ++i) {
+	for (i=0; i<8; ++i) {
 		iv_and_seed[i+cur_salt->ivLength] = (unsigned char)(seed & 0xff);
 		seed >>= 8;
 	}
@@ -151,7 +134,7 @@ static void flipBytes(unsigned char *buf, int size)
 	int i;
 	while(bytesLeft) {
 		int toFlip = MIN_( sizeof(revBuf), bytesLeft );
-		for(i=0; i<toFlip; ++i)
+		for (i=0; i<toFlip; ++i)
 			revBuf[i] = buf[toFlip - (i+1)];
 		memcpy( buf, revBuf, toFlip );
 		bytesLeft -= toFlip;
@@ -168,11 +151,11 @@ static uint64_t _checksum_64(encfs_common_custom_salt *cur_salt, unsigned char *
 	uint64_t value;
 
 	memcpy(DataIV, data, dataLen);
-	if(chainedIV)
+	if (chainedIV)
 	{
 	  // toss in the chained IV as well
 		uint64_t tmp = *chainedIV;
-		for(i=0; i<8; ++i) {
+		for (i=0; i<8; ++i) {
 			DataIV[dataLen++] = (tmp & 0xff);
 			tmp >>= 8;
 		}
@@ -180,11 +163,11 @@ static uint64_t _checksum_64(encfs_common_custom_salt *cur_salt, unsigned char *
 	hmac_sha1(key, cur_salt->keySize, DataIV, dataLen, md, 20);
 
 	// chop this down to a 64bit value..
-	for(i=0; i < 19; ++i)
+	for (i=0; i < 19; ++i)
 		h[i%8] ^= (unsigned char)(md[i]);
 
 	value = (uint64_t)h[0];
-	for(i=1; i<8; ++i)
+	for (i=1; i<8; ++i)
 		value = (value << 8) | (uint64_t)h[i];
 	return value;
 }
@@ -192,7 +175,7 @@ static uint64_t _checksum_64(encfs_common_custom_salt *cur_salt, unsigned char *
 static uint64_t MAC_64(encfs_common_custom_salt *cur_salt,  const unsigned char *data, int len, unsigned char *key, uint64_t *chainedIV )
 {
 	uint64_t tmp = _checksum_64(cur_salt, key, data, len, chainedIV );
-	if(chainedIV)
+	if (chainedIV)
 		*chainedIV = tmp;
 	return tmp;
 }
@@ -205,35 +188,39 @@ unsigned int encfs_common_MAC_32(encfs_common_custom_salt *cur_salt, unsigned ch
 	return mac32;
 }
 
-int encfs_common_streamDecode(encfs_common_custom_salt *cur_salt, unsigned char *buf, int size, uint64_t iv64, unsigned char *key)
+static void AES_cfb_decrypt(AES_KEY *akey, int len, unsigned char *iv,
+                            const unsigned char *input, unsigned char *output)
 {
-	unsigned char ivec[ MAX_IVLENGTH ];
-	int dstLen=0, tmpLen=0;
-	EVP_CIPHER_CTX stream_dec;
+	int n = 0;
+
+	while (len--) {
+		unsigned char c;
+
+		if (!n)
+			AES_ecb_encrypt(iv, iv, akey, AES_ENCRYPT);
+
+		c = *input++;
+		*output++ = c ^ iv[n];
+		iv[n] = c;
+
+		n = (n + 1) & 0x0f;
+	}
+}
+
+void encfs_common_streamDecode(encfs_common_custom_salt *cur_salt,
+                               unsigned char *buf, int size, uint64_t iv64,
+                               unsigned char *key)
+{
+	unsigned char ivec[MAX_IVLENGTH];
+	AES_KEY akey;
 
 	encfs_common_setIVec(cur_salt, ivec, iv64 + 1, key);
-	EVP_CIPHER_CTX_init(&stream_dec);
-	EVP_DecryptInit_ex( &stream_dec, cur_salt->streamCipher, NULL, NULL, NULL);
-	EVP_CIPHER_CTX_set_key_length( &stream_dec, cur_salt->keySize );
-	EVP_CIPHER_CTX_set_padding( &stream_dec, 0 );
-	EVP_DecryptInit_ex( &stream_dec, NULL, NULL, key, NULL);
+	AES_set_encrypt_key(key, cur_salt->keySize * 8, &akey);
+	AES_cfb_decrypt(&akey, size, ivec, buf, buf);
+	unshuffleBytes(buf, size);
+	flipBytes(buf, size);
 
-	EVP_DecryptInit_ex( &stream_dec, NULL, NULL, NULL, ivec);
-	EVP_DecryptUpdate( &stream_dec, buf, &dstLen, buf, size );
-	EVP_DecryptFinal_ex( &stream_dec, buf+dstLen, &tmpLen );
-	unshuffleBytes( buf, size );
-	flipBytes( buf, size );
-
-	encfs_common_setIVec(cur_salt, ivec, iv64, key );
-	EVP_DecryptInit_ex( &stream_dec, NULL, NULL, NULL, ivec);
-	EVP_DecryptUpdate( &stream_dec, buf, &dstLen, buf, size );
-	EVP_DecryptFinal_ex( &stream_dec, buf+dstLen, &tmpLen );
-	EVP_CIPHER_CTX_cleanup(&stream_dec);
-
-	unshuffleBytes( buf, size );
-	dstLen += tmpLen;
-	if(dstLen != size) {
-	}
-
-	return 1;
+	encfs_common_setIVec(cur_salt, ivec, iv64, key);
+	AES_cfb_decrypt(&akey, size, ivec, buf, buf);
+	unshuffleBytes(buf, size);
 }

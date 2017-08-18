@@ -41,19 +41,19 @@
 #endif
 #include <errno.h>
 #if !AC_BUILT
-# include <string.h>
-# ifndef _MSC_VER
-#  include <strings.h>
-# endif
+ #include <string.h>
+ #ifndef _MSC_VER
+  #include <strings.h>
+ #endif
 #else
-# if STRING_WITH_STRINGS
-#  include <string.h>
-#  include <strings.h>
-# elif HAVE_STRING_H
-#  include <string.h>
-# elif HAVE_STRINGS_H
-#  include <strings.h>
-# endif
+ #if STRING_WITH_STRINGS
+  #include <string.h>
+  #include <strings.h>
+ #elif HAVE_STRING_H
+  #include <string.h>
+ #elif HAVE_STRINGS_H
+  #include <strings.h>
+ #endif
 #endif
 #include <stdlib.h>
 #include <sys/stat.h>
@@ -115,14 +115,11 @@ static int john_omp_threads_new;
 #include "regex.h"
 
 #include "unicode.h"
-#if HAVE_OPENCL || HAVE_CUDA
+#if HAVE_OPENCL
 #include "common-gpu.h"
 #endif
 #if HAVE_OPENCL
 #include "common-opencl.h"
-#endif
-#if HAVE_CUDA
-#include "cuda_common.h"
 #endif
 #ifdef NO_JOHN_BLD
 #define JOHN_BLD "unk-build-type"
@@ -160,14 +157,10 @@ extern struct fmt_main fmt_dummy;
 extern struct fmt_main fmt_NT;
 #ifdef HAVE_ZTEX
 extern struct fmt_main fmt_ztex_descrypt;
+extern struct fmt_main fmt_ztex_bcrypt;
 #endif
 
 #include "fmt_externs.h"
-
-#if HAVE_CUDA
-extern struct fmt_main fmt_cuda_rawsha224;
-extern struct fmt_main fmt_cuda_rawsha256;
-#endif
 
 extern int unshadow(int argc, char **argv);
 extern int unafs(int argc, char **argv);
@@ -178,12 +171,8 @@ extern int base64conv(int argc, char **argv);
 extern int hccap2john(int argc, char **argv);
 extern int zip2john(int argc, char **argv);
 extern int gpg2john(int argc, char **argv);
-extern int pfx2john(int argc, char **argv);
-extern int keepass2john(int argc, char **argv);
 extern int rar2john(int argc, char **argv);
 extern int racf2john(int argc, char **argv);
-extern int dmg2john(int argc, char **argv);
-extern int putty2john(int argc, char **argv);
 
 int john_main_process = 1;
 #if OS_FORK
@@ -191,6 +180,8 @@ int john_child_count = 0;
 int *john_child_pids = NULL;
 #endif
 char *john_terminal_locale ="C";
+
+unsigned long long john_max_cands;
 
 static int children_ok = 1;
 
@@ -276,28 +267,17 @@ static void john_register_one(struct fmt_main *format)
 				return;
 		}
 		else if (!strcasecmp(options.format, "cpu")) {
-			if (strstr(format->params.label, "-opencl") ||
-			    strstr(format->params.label, "-cuda"))
+			if (strstr(format->params.label, "-opencl"))
 				return;
 		}
 		else if (!strcasecmp(options.format, "cpu-dynamic")) {
-			if (strstr(format->params.label, "-opencl") ||
-			    strstr(format->params.label, "-cuda"))
+			if (strstr(format->params.label, "-opencl"))
 				return;
 			if (format->params.flags & FMT_DYNAMIC)
 				return;
 		}
-		else if (!strcasecmp(options.format, "gpu")) {
-			if (!strstr(format->params.label, "-opencl") &&
-			    !strstr(format->params.label, "-cuda"))
-				return;
-		}
 		else if (!strcasecmp(options.format, "opencl")) {
 			if (!strstr(format->params.label, "-opencl"))
-				return;
-		}
-		else if (!strcasecmp(options.format, "cuda")) {
-			if (!strstr(format->params.label, "-cuda"))
 				return;
 		}
 #ifdef _OPENMP
@@ -308,15 +288,13 @@ static void john_register_one(struct fmt_main *format)
 		else if (!strcasecmp(options.format, "cpu+omp")) {
 			if ((format->params.flags & FMT_OMP) != FMT_OMP)
 				return;
-			if (strstr(format->params.label, "-opencl") ||
-			    strstr(format->params.label, "-cuda"))
+			if (strstr(format->params.label, "-opencl"))
 				return;
 		}
 		else if (!strcasecmp(options.format, "cpu+omp-dynamic")) {
 			if ((format->params.flags & FMT_OMP) != FMT_OMP)
 				return;
-			if (strstr(format->params.label, "-opencl") ||
-			    strstr(format->params.label, "-cuda"))
+			if (strstr(format->params.label, "-opencl"))
 				return;
 			if (format->params.flags & FMT_DYNAMIC)
 				return;
@@ -380,6 +358,7 @@ static void john_register_all(void)
 // Let ZTEX format appear before CPU format
 #ifdef HAVE_ZTEX
 	john_register_one(&fmt_ztex_descrypt);
+	john_register_one(&fmt_ztex_bcrypt);
 #endif
 	john_register_one(&fmt_DES);
 	john_register_one(&fmt_BSDI);
@@ -406,11 +385,6 @@ static void john_register_all(void)
 	// This format is deprecated so now registers after plug-in NT format.
 	john_register_one(&fmt_NT);
 
-#if HAVE_CUDA
-	john_register_one(&fmt_cuda_rawsha224);
-	john_register_one(&fmt_cuda_rawsha256);
-#endif
-
 	john_register_one(&fmt_dummy);
 #if HAVE_CRYPT
 	john_register_one(&fmt_crypt);
@@ -426,6 +400,8 @@ static void john_register_all(void)
 static void john_log_format(void)
 {
 	int min_chunk, chunk;
+	int enc_len, utf8_len;
+	char max_len_s[128];
 
 	/* make sure the format is properly initialized */
 #if HAVE_OPENCL
@@ -434,11 +410,35 @@ static void john_log_format(void)
 #endif
 	fmt_init(database.format);
 
-	log_event("- Hash type: %.100s%s%.100s (lengths up to %d%s)",
+	utf8_len = enc_len = database.format->params.plaintext_length;
+	if (options.target_enc == UTF_8)
+		utf8_len /= 3;
+
+	if (!(database.format->params.flags & FMT_8_BIT) ||
+	    options.target_enc != UTF_8) {
+		/* Not using UTF-8 so length is not ambiguous */
+		snprintf(max_len_s, sizeof(max_len_s), "%d", enc_len);
+	} else if (!fmt_raw_len || fmt_raw_len == enc_len) {
+		/* Example: Office and thin dynamics */
+		snprintf(max_len_s, sizeof(max_len_s),
+		         "%d [worst case UTF-8] to %d [ASCII]",
+		         utf8_len, enc_len);
+	} else if (enc_len == 3 * fmt_raw_len) {
+		/* Example: NT */
+		snprintf(max_len_s, sizeof(max_len_s), "%d", utf8_len);
+	} else {
+		/* Example: SybaseASE */
+		snprintf(max_len_s, sizeof(max_len_s),
+		         "%d [worst case UTF-8] to %d [ASCII]",
+		         utf8_len, fmt_raw_len);
+	}
+
+	log_event("- Hash type: %.100s%s%.100s (min-len %d, max-len %s%s)",
 	    database.format->params.label,
 	    database.format->params.format_name[0] ? ", " : "",
 	    database.format->params.format_name,
-	    database.format->params.plaintext_length,
+	    database.format->params.plaintext_min_length,
+	    max_len_s,
 	    (database.format == &fmt_DES || database.format == &fmt_LM) ?
 	    ", longer passwords split" : "");
 
@@ -511,8 +511,7 @@ static void john_omp_show_info(void)
 	if (mpi_p == 1)
 #endif
 	if (database.format && database.format->params.label &&
-	        (!strstr(database.format->params.label, "-opencl") &&
-	         !strstr(database.format->params.label, "-cuda")))
+	        !strstr(database.format->params.label, "-opencl"))
 	if (!options.fork && john_omp_threads_orig > 1 &&
 	    database.format && database.format != &dummy_format &&
 	    !rec_restoring_now) {
@@ -562,16 +561,16 @@ static void john_omp_show_info(void)
 	 * mpirun -x OMP_NUM_THREADS=4 -np 4 -host ...
 	 */
 	if (mpi_p > 1) {
-		if(getenv("OMP_NUM_THREADS") == NULL &&
+		if (getenv("OMP_NUM_THREADS") == NULL &&
 		   cfg_get_bool(SECTION_OPTIONS, SUBSECTION_MPI,
 		                "MPIOMPmutex", 1)) {
-			if(cfg_get_bool(SECTION_OPTIONS, SUBSECTION_MPI,
+			if (cfg_get_bool(SECTION_OPTIONS, SUBSECTION_MPI,
 			                "MPIOMPverbose", 1) && mpi_id == 0)
 				fprintf(stderr, "MPI in use, disabling OMP "
 				        "(see doc/README.mpi)\n");
 			omp_set_num_threads(1);
 			john_omp_threads_orig = 0; /* Mute later warning */
-		} else if(john_omp_threads_orig > 1 &&
+		} else if (john_omp_threads_orig > 1 &&
 		        cfg_get_bool(SECTION_OPTIONS, SUBSECTION_MPI,
 		                "MPIOMPverbose", 1) && mpi_id == 0)
 			fprintf(stderr, "Note: Running both MPI and OMP"
@@ -1022,7 +1021,7 @@ static void load_extra_pots(struct db_main *db, void (*process_file)(struct db_m
 				struct dirent *ep;
 
 				while ((ep = readdir(dp))) {
-					char dname[PATH_BUFFER_SIZE];
+					char dname[2 * PATH_BUFFER_SIZE];
 					char *p;
 
 					if (!(p = strrchr(ep->d_name, '.')) ||
@@ -1373,9 +1372,7 @@ static void john_load(void)
 #if CPU_DETECT
 static void CPU_detect_or_fallback(char **argv, int make_check)
 {
-	if (getenv("CPUID_DISABLE"))
-		return;
-
+	if (!getenv("CPUID_DISABLE"))
 	if (!CPU_detect()) {
 #if CPU_REQ
 #if CPU_FALLBACK
@@ -1403,9 +1400,16 @@ static void CPU_detect_or_fallback(char **argv, int make_check)
 		error();
 #endif
 	}
+
+	/*
+	 * Init the crc table here, so that tables are fully setup for any
+	 * ancillary program
+	 */
+	CRC32_Init_tab();
+
 }
 #else
-#define CPU_detect_or_fallback(argv, make_check)
+#define CPU_detect_or_fallback(argv, make_check) CRC32_Init_tab()
 #endif
 
 static void john_init(char *name, int argc, char **argv)
@@ -1440,7 +1444,7 @@ static void john_init(char *name, int argc, char **argv)
 #if (!AC_BUILT || HAVE_LOCALE_H)
 	if (setlocale(LC_ALL, "")) {
 		john_terminal_locale = str_alloc_copy(setlocale(LC_ALL, NULL));
-#if HAVE_OPENCL || HAVE_CUDA
+#if HAVE_OPENCL
 		if (strchr(john_terminal_locale, '.'))
 			sprintf(gpu_degree_sign, "%ls", DEGREE_SIGN);
 #endif
@@ -1486,7 +1490,7 @@ static void john_init(char *name, int argc, char **argv)
 #if HAVE_OPENCL
 	gpu_id = -1;
 #endif
-#if HAVE_OPENCL || HAVE_CUDA
+#if HAVE_OPENCL
 	gpu_device_list[0] = gpu_device_list[1] = -1;
 #endif
 	/* Process configuration options that depend on cfg_init() */
@@ -1495,7 +1499,7 @@ static void john_init(char *name, int argc, char **argv)
 #ifdef _OPENMP
 	john_omp_maybe_adjust_or_fallback(argv);
 #endif
-	if(!(options.flags & FLG_STDOUT))
+	if (!(options.flags & FLG_STDOUT))
 		john_register_all(); /* maybe restricted to one format by options */
 	common_init();
 	sig_init();
@@ -1531,10 +1535,6 @@ static void john_init(char *name, int argc, char **argv)
 	    options.listconf)
 		listconf_parse_late();
 
-	/* Start a resumed session by emitting a status line. */
-	if (rec_restored)
-		event_pending = event_status = 1;
-
 	/* Log the expanded command line used for this session. */
 	{
 		int i;
@@ -1558,7 +1558,7 @@ static void john_init(char *name, int argc, char **argv)
 		log_event("- MPI: Node %u/%u running on %s",
 		          mpi_id + 1, mpi_p, mpi_name);
 #endif
-#if defined(HAVE_CUDA) || defined(HAVE_OPENCL)
+#if defined(HAVE_OPENCL)
 	gpu_log_temp();
 #endif
 
@@ -1675,9 +1675,16 @@ static void john_run(void)
 				  "bytes" : "characters");
 
 		/* Some formats have a minimum plaintext length */
-		if (database.format->params.plaintext_min_length &&
-		    options.req_minlength <
+		if (options.req_minlength >= 0 && options.req_minlength <
 		    database.format->params.plaintext_min_length) {
+			if (john_main_process)
+				fprintf(stderr, "Invalid option: "
+				        "--min-length smaller than "
+				        "minimum length for format\n");
+			error();
+		}
+		if (database.format->params.plaintext_min_length &&
+		    options.req_minlength == -1) {
 			options.req_minlength =
 				database.format->params.plaintext_min_length;
 			if (john_main_process)
@@ -1704,6 +1711,13 @@ static void john_run(void)
 
 		if (options.flags & FLG_MASK_CHK)
 			mask_crk_init(&database);
+
+		/* Placed here to disregard load time. */
+		sig_init_late();
+
+		/* Start a resumed session by emitting a status line. */
+		if (rec_restored)
+			event_pending = event_status = 1;
 
 		if (options.flags & FLG_SINGLE_CHK)
 			do_single_crack(&database);
@@ -1785,10 +1799,23 @@ static void john_done(void)
 	if ((options.flags & (FLG_CRACKING_CHK | FLG_STDOUT)) ==
 	    FLG_CRACKING_CHK) {
 		if (event_abort) {
-			log_event((aborted_by_timer) ?
+			char *abort_msg = (aborted_by_timer) ?
 			          "Session stopped (max run-time reached)" :
-			          "Session aborted");
-			/* We have already printed to stderr from signals.c */
+			          "Session aborted";
+
+			if (john_max_cands) {
+				unsigned long long cands =
+					((unsigned long long)
+					 status.cands.hi << 32) +
+					status.cands.lo;
+
+				if (cands >= john_max_cands)
+					abort_msg =
+						"Session stopped (max candidates reached)";
+			}
+
+			/* We already printed to stderr from signals.c */
+			log_event("%s", abort_msg);
 		} else if (children_ok) {
 			log_event("Session completed");
 			if (john_main_process)
@@ -1803,17 +1830,13 @@ static void john_done(void)
 		}
 		fmt_done(database.format);
 	}
-#if defined(HAVE_CUDA) || defined(HAVE_OPENCL)
+#if defined(HAVE_OPENCL)
 	gpu_log_temp();
 #endif
 	log_done();
 #if HAVE_OPENCL
 	if (!(options.flags & FLG_FORK) || john_main_process)
 		opencl_done();
-#endif
-#if HAVE_CUDA
-	if (!(options.flags & FLG_FORK) || john_main_process)
-		cuda_done();
 #endif
 
 	path_done();
@@ -1829,10 +1852,13 @@ static void john_done(void)
 
 //#define TEST_MEMDBG_LOGIC
 
+#ifdef HAVE_LIBFUZZER
+int main_dummy(int argc, char **argv)
+#else
 int main(int argc, char **argv)
+#endif
 {
 	char *name;
-	unsigned int time;
 
 #ifdef TEST_MEMDBG_LOGIC
 	int i,j;
@@ -1895,9 +1921,6 @@ int main(int argc, char **argv)
 	}
 #endif
 
-	/* put the crc table init here, so that tables are fully setup for any ancillary program */
-	CRC32_Init_tab();
-        
         /* Needed before CPU fallback */
 	path_init(argv);
 
@@ -1921,23 +1944,6 @@ int main(int argc, char **argv)
 		return unique(argc, argv);
 	}
 
-	if (!strcmp(name, "putty2john")) {
-		CPU_detect_or_fallback(argv, 0);
-		return putty2john(argc, argv);
-	}
-
-#if !AC_BUILT || HAVE_BIO_NEW
-	if (!strcmp(name, "pfx2john")) {
-		CPU_detect_or_fallback(argv, 0);
-		return pfx2john(argc, argv);
-	}
-#endif
-
-	if (!strcmp(name, "keepass2john")) {
-		CPU_detect_or_fallback(argv, 0);
-		return keepass2john(argc, argv);
-	}
-
 	if (!strcmp(name, "rar2john")) {
 		CPU_detect_or_fallback(argv, 0);
 		return rar2john(argc, argv);
@@ -1952,12 +1958,6 @@ int main(int argc, char **argv)
 		CPU_detect_or_fallback(argv, 0);
 		return gpg2john(argc, argv);
 	}
-#if !defined (_MSC_VER) && !defined (__MINGW32__)
-	if (!strcmp(name, "dmg2john")) {
-		CPU_detect_or_fallback(argv, 0);
-		return dmg2john(argc, argv);
-	}
-#endif
 
 	if (!strcmp(name, "zip2john")) {
 		CPU_detect_or_fallback(argv, 0);
@@ -1973,16 +1973,21 @@ int main(int argc, char **argv)
 	}
 	john_init(name, argc, argv);
 
-	/* Placed here to disregard load time. */
-#if OS_TIMER
-	time = 0;
-#else
-	time = status_get_time();
-#endif
-	if (options.max_run_time)
-		timer_abort = time + abs(options.max_run_time);
-	if (options.status_interval)
-		timer_status = time + options.status_interval;
+	if (options.max_cands) {
+		if (options.node_count) {
+			long long orig_max_cands = options.max_cands;
+
+			/* Split between nodes */
+			options.max_cands /= options.node_count;
+			if (options.node_min == 1)
+				options.max_cands +=
+					orig_max_cands % options.node_count;
+		}
+
+		/* Allow resuming, for another set of N candidates */
+		john_max_cands = ((unsigned long long)status.cands.hi << 32) +
+			status.cands.lo + llabs(options.max_cands);
+	}
 
 	john_run();
 	john_done();
@@ -1991,3 +1996,27 @@ int main(int argc, char **argv)
 
 	return exit_status;
 }
+
+#ifdef HAVE_LIBFUZZER
+
+int LLVMFuzzerInitialize(int *argc, char ***argv)
+{
+	return 1;
+}
+
+// dummy fuzzing target
+int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)  // size is actually the length of Data
+{
+	static uint8_t buffer[8192];
+
+	if (size > sizeof(buffer) - 1) {
+		fprintf(stderr, "size (-max_len) is greater than supported value, aborting!\n");
+		exit(-1);
+	}
+	memcpy(buffer, data, size);
+	buffer[size] = 0;
+	jtr_basename((const char*)buffer);
+
+	return 0;
+}
+#endif

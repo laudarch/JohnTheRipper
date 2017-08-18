@@ -12,6 +12,7 @@ extern struct fmt_main fmt_encfs;
 john_register_one(&fmt_encfs);
 #else
 
+#include <stdint.h>
 #include <openssl/opensslv.h>
 #include <openssl/crypto.h>
 #include <openssl/ssl.h>
@@ -19,7 +20,6 @@ john_register_one(&fmt_encfs);
 #include <string.h>
 
 #include "arch.h"
-#include "stdint.h"
 #include "pbkdf2_hmac_sha1.h"
 #include "encfs_common.h"
 #include "options.h"
@@ -172,12 +172,12 @@ static int crypt_all(int *pcount, struct db_salt *salt)
 #endif
 		for (j = 0; j < MAX_KEYS_PER_CRYPT; ++j) {
 			// First N bytes are checksum bytes.
-			for(i=0; i<KEY_CHECKSUM_BYTES; ++i)
+			for (i=0; i<KEY_CHECKSUM_BYTES; ++i)
 				checksum = (checksum << 8) | (unsigned int)cur_salt->data[i];
 			memcpy( tmpBuf, cur_salt->data+KEY_CHECKSUM_BYTES, cur_salt->keySize + cur_salt->ivLength );
 			encfs_common_streamDecode(cur_salt, tmpBuf, cur_salt->keySize + cur_salt->ivLength ,checksum, master[j]);
 			checksum2 = encfs_common_MAC_32(cur_salt, tmpBuf,  cur_salt->keySize + cur_salt->ivLength, master[j]);
-			if(checksum2 == checksum) {
+			if (checksum2 == checksum) {
 				cracked[index+j] = 1;
 #ifdef _OPENMP
 #pragma omp atomic

@@ -53,7 +53,7 @@ john_register_one(&fmt_vtp);
 #define BENCHMARK_LENGTH        0
 #define PLAINTEXT_LENGTH        55 // keep under 1 MD5 block AND this is now tied into logic in vtp_secret_derive()
 #define BINARY_SIZE             16
-#define BINARY_ALIGN            sizeof(ARCH_WORD_32)
+#define BINARY_ALIGN            sizeof(uint32_t)
 #define SALT_SIZE               sizeof(struct custom_salt)
 #define SALT_ALIGN              sizeof(int)
 #define MIN_KEYS_PER_CRYPT      1
@@ -69,7 +69,7 @@ static struct fmt_tests tests[] = {
 static char (*saved_key)[PLAINTEXT_LENGTH + 1];
 static unsigned char (*secret)[16];
 static int *saved_len, dirty;
-static ARCH_WORD_32 (*crypt_out)[BINARY_SIZE / sizeof(ARCH_WORD_32)];
+static uint32_t (*crypt_out)[BINARY_SIZE / sizeof(uint32_t)];
 
 /* VTP summary advertisement packet, partially based on original Yersinia code */
 typedef struct {
@@ -132,7 +132,7 @@ static int valid(char *ciphertext, struct fmt_main *self)
 
 	if ((p = strtokm(p, "$")) == NULL) /* version */
 		goto err;
-	if(!isdec(p))
+	if (!isdec(p))
 		goto err;
 	res = atoi(p);
 	if (res != 1  && res != 2)  // VTP version 3 support is pending
@@ -140,7 +140,7 @@ static int valid(char *ciphertext, struct fmt_main *self)
 
 	if ((p = strtokm(NULL, "$")) == NULL)  /* vlans len */
 		goto err;
-	if(!isdec(p))
+	if (!isdec(p))
 		goto err;
 	res = atoi(p);
 	if ((p = strtokm(NULL, "$")) == NULL)  /* vlans data */
@@ -152,7 +152,7 @@ static int valid(char *ciphertext, struct fmt_main *self)
 
 	if ((p = strtokm(NULL, "$")) == NULL)  /* salt len */
 		goto err;
-	if(!isdec(p))
+	if (!isdec(p))
 		goto err;
 	res = atoi(p);
 	if ((p = strtokm(NULL, "$")) == NULL)  /* salt */
@@ -266,7 +266,7 @@ static void vtp_secret_derive(char *password, int length, unsigned char *output)
 	}
 
 	MD5_Init(&ctx);
-	for(i = 0; i < 1563; i++) { /* roughly 1 MB */
+	for (i = 0; i < 1563; i++) { /* roughly 1 MB */
 		cp = buf;
 			for (j = 0; j < 64; j++) /* treat password as a cyclic generator */
 				*cp++ = password[password_idx++ % length];
@@ -308,7 +308,7 @@ static void vtp_secret_derive(char *password, int length, unsigned char *output)
 	}
 
 	MD5_Init(&ctx);
-	for(i = 0, j=0; i < 1563; ++i) { /* roughly 1 MB */
+	for (i = 0, j=0; i < 1563; ++i) { /* roughly 1 MB */
 		MD5_Update(&ctx, buf[j++], 64);
 		if (j == bufs_used)
 			j = 0;
@@ -366,7 +366,7 @@ static int cmp_all(void *binary, int count)
 #ifdef _OPENMP
 	for (; index < count; index++)
 #endif
-		if (((ARCH_WORD_32*)binary)[0] == crypt_out[index][0])
+		if (((uint32_t*)binary)[0] == crypt_out[index][0])
 			return 1;
 	return 0;
 }
@@ -410,7 +410,7 @@ struct fmt_main fmt_vtp = {
 		SALT_ALIGN,
 		MIN_KEYS_PER_CRYPT,
 		MAX_KEYS_PER_CRYPT,
-		FMT_CASE | FMT_8_BIT | FMT_OMP,
+		FMT_CASE | FMT_8_BIT | FMT_OMP | FMT_HUGE_INPUT,
 		{ NULL },
 		{ FORMAT_TAG },
 		tests
@@ -426,7 +426,7 @@ struct fmt_main fmt_vtp = {
 		{ NULL },
 		fmt_default_source,
 		{
-			fmt_default_binary_hash /* Not usable with $SOURCE_HASH$ */
+			fmt_default_binary_hash
 		},
 		fmt_default_salt_hash,
 		NULL,
@@ -436,7 +436,7 @@ struct fmt_main fmt_vtp = {
 		fmt_default_clear_keys,
 		crypt_all,
 		{
-			fmt_default_get_hash /* Not usable with $SOURCE_HASH$ */
+			fmt_default_get_hash
 		},
 		cmp_all,
 		cmp_one,

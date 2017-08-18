@@ -12,12 +12,13 @@ extern struct fmt_main fmt_strip;
 john_register_one(&fmt_strip);
 #else
 
-#include "aes.h"
 #include <string.h>
-#include "stdint.h"
+#include <stdint.h>
 #include <assert.h>
 #include <errno.h>
+
 #include "arch.h"
+#include "aes.h"
 #include "misc.h"
 #include "common.h"
 #include "formats.h"
@@ -154,9 +155,10 @@ static int verify_page(unsigned char *page1)
 {
 	uint32_t pageSize;
 	uint32_t usableSize;
-	if (memcmp(page1, SQLITE_FILE_HEADER, 16) != 0) {
-		return -1;
-	}
+
+	//if (memcmp(page1, SQLITE_FILE_HEADER, 16) != 0) {
+	//	return -1;
+	//}
 
 	if (page1[19] > 2) {
 		return -1;
@@ -191,7 +193,7 @@ static int crypt_all(int *pcount, struct db_salt *salt)
 #endif
 	{
 		unsigned char master[MAX_KEYS_PER_CRYPT][32];
-		unsigned char output[1024];
+		unsigned char output[24];
 		unsigned char *iv_in;
 		unsigned char iv_out[16];
 		int size,i;
@@ -214,16 +216,17 @@ static int crypt_all(int *pcount, struct db_salt *salt)
 		       16, ITERATIONS, master[0], 32, 0);
 #endif
 		for (i = 0; i < MAX_KEYS_PER_CRYPT; ++i) {
-			memcpy(output, SQLITE_FILE_HEADER, FILE_HEADER_SZ);
+			//memcpy(output, SQLITE_FILE_HEADER, FILE_HEADER_SZ);
 			size = page_sz - reserve_sz;
 			iv_in = cur_salt->data + size + 16;
 			memcpy(iv_out, iv_in, 16);
 
-			if (AES_set_decrypt_key(master[i], 256, &akey) < 0) {
-				fprintf(stderr, "AES_set_decrypt_key failed!\n");
-			}
-			/* decrypting 24 bytes is enough */
-			AES_cbc_encrypt(cur_salt->data + 16, output + 16, 24, &akey, iv_out, AES_DECRYPT);
+			AES_set_decrypt_key(master[i], 256, &akey);
+			/*
+			 * decrypting 8 bytes from offset 16 is enough since the
+			 * verify_page function looks at output[16..23] only.
+			 */
+			AES_cbc_encrypt(cur_salt->data + 16, output + 16, 8, &akey, iv_out, AES_DECRYPT);
 			if (verify_page(output) == 0) {
 				cracked[index+i] = 1;
 			}
@@ -282,7 +285,7 @@ struct fmt_main fmt_strip = {
 		SALT_ALIGN,
 		MIN_KEYS_PER_CRYPT,
 		MAX_KEYS_PER_CRYPT,
-		FMT_CASE | FMT_8_BIT | FMT_OMP,
+		FMT_CASE | FMT_8_BIT | FMT_OMP | FMT_HUGE_INPUT,
 		{ NULL },
 		{ FORMAT_TAG },
 		strip_tests
@@ -298,7 +301,7 @@ struct fmt_main fmt_strip = {
 		{ NULL },
 		fmt_default_source,
 		{
-			fmt_default_binary_hash /* Not usable with $SOURCE_HASH$ */
+			fmt_default_binary_hash
 		},
 		fmt_default_salt_hash,
 		NULL,
@@ -308,7 +311,7 @@ struct fmt_main fmt_strip = {
 		fmt_default_clear_keys,
 		crypt_all,
 		{
-			fmt_default_get_hash /* Not usable with $SOURCE_HASH$ */
+			fmt_default_get_hash
 		},
 		cmp_all,
 		cmp_one,

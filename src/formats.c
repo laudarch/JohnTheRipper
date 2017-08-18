@@ -3,6 +3,7 @@
  * Copyright (c) 1996-2001,2006,2008,2010-2013,2015 by Solar Designer
  */
 
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -15,20 +16,12 @@
 #include "base64_convert.h"
 #ifndef BENCH_BUILD
 #include "options.h"
-#else
-#if ARCH_INT_GT_32
-typedef unsigned short ARCH_WORD_32;
-#else
-typedef unsigned int ARCH_WORD_32;
-#endif
 #include "loader.h"
 #endif
 
 /* this is just for advance_cursor() */
 #ifdef HAVE_OPENCL
 #include "common-opencl.h"
-#elif HAVE_CUDA
-#include "cuda_common.h"
 #endif
 #include "jumbo.h"
 #include "bench.h"
@@ -41,6 +34,8 @@ static struct fmt_main **fmt_tail = &fmt_list;
 static char *buf_key;
 
 extern volatile int bench_running;
+
+int fmt_raw_len;
 
 #ifndef BENCH_BUILD
 static int orig_min, orig_max, orig_len;
@@ -80,6 +75,8 @@ void fmt_init(struct fmt_main *format)
 			orig_len = format->params.plaintext_length;
 		}
 #endif
+		if (!fmt_raw_len)
+			fmt_raw_len = format->params.plaintext_length;
 		format->methods.init(format);
 #ifndef BENCH_BUILD
 		/* NOTE, we have to grab these values (the first time), from after
@@ -135,6 +132,7 @@ void fmt_done(struct fmt_main *format)
 #endif
 
 	}
+	fmt_raw_len = 0;
 }
 
 void fmt_all_done(void)
@@ -239,7 +237,7 @@ static char* is_key_right(struct fmt_main *format, int index,
 	    format->methods.get_hash[size](i) !=
 	    format->methods.binary_hash[size](binary)) {
 #ifndef BENCH_BUILD
-    		if (options.verbosity > VERB_LEGACY) {
+		if (options.verbosity > VERB_LEGACY) {
 			// Dump out as much as possible (up to 3 full bytes). This can
 			// help in trying to track down problems, like needing to SWAP
 			// the binary or other issues, when doing BE ports.  Here
@@ -388,7 +386,12 @@ static char *fmt_self_test_body(struct fmt_main *format,
 	if (format->private.initialized == 2)
 		return NULL;
 #endif
-
+#if defined(HAVE_OPENCL)
+	if (strcasestr(format->params.label, "-opencl") &&
+	    !strstr(format->params.label, "-opencl")) {
+		return "-opencl suffix must be lower case";
+	}
+#endif
 #ifndef BENCH_BUILD
 	if (options.flags & FLG_NOTESTS) {
 		fmt_init(format);
@@ -467,6 +470,22 @@ static char *fmt_self_test_body(struct fmt_main *format,
 	if (format->methods.valid("*", format))
 		return "valid";
 
+	if (format->methods.source != fmt_default_source &&
+	    format->params.salt_size != 0)
+		return "source method only allowed for unsalted formats";
+
+	if (format->params.flags & FMT_HUGE_INPUT) {
+		for (size = 0; size < PASSWORD_HASH_SIZES; size++) {
+			if (format->methods.binary_hash[size] &&
+			    format->methods.binary_hash[size] !=
+			    fmt_default_binary_hash)
+				return "binary_hash method not allowed for FMT_HUGE_INPUT";
+			if (format->methods.get_hash[size] &&
+			    format->methods.get_hash[size] !=
+			    fmt_default_get_hash)
+				return "get_hash method not allowed for FMT_HUGE_INPUT";
+		}
+	}
 #ifndef JUMBO_JTR
 	fmt_init(format);
 #endif
@@ -525,6 +544,11 @@ static char *fmt_self_test_body(struct fmt_main *format,
 	index = 0; max = format->params.max_keys_per_crypt;
 
 	do {
+		if (strnlen(current->ciphertext, LINE_BUFFER_SIZE + 1) >
+		    LINE_BUFFER_SIZE &&
+		    !(format->params.flags & FMT_HUGE_INPUT))
+			return "Long test vector but not FMT_HUGE_INPUT";
+
 		if (!current->fields[1])
 			current->fields[1] = current->ciphertext;
 		ciphertext = format->methods.prepare(current->fields, format);
@@ -738,11 +762,9 @@ static char *fmt_self_test_body(struct fmt_main *format,
 			memcpy(salt_copy, salt, format->params.salt_size);
 		salt = salt_copy;
 
-#ifndef JUMBO_JTR
 		if (strcmp(ciphertext,
 		    format->methods.source(ciphertext, binary)))
 			return "source";
-#endif
 
 		if ((unsigned int)format->methods.salt_hash(salt) >=
 		    SALT_HASH_SIZE)
@@ -750,10 +772,6 @@ static char *fmt_self_test_body(struct fmt_main *format,
 
 		format->methods.set_salt(salt);
 #ifdef JUMBO_JTR
-		if (strcmp(ciphertext,
-		    format->methods.source(ciphertext, binary))) {
-			return "source";
-		}
 #ifndef BENCH_BUILD
 		if ((format->methods.get_hash[0] != fmt_default_get_hash) &&
 		    strlen(ciphertext) > MAX_CIPHERTEXT_SIZE)
@@ -815,14 +833,14 @@ static char *fmt_self_test_body(struct fmt_main *format,
 			}
 
 #if 0
-#if defined(HAVE_OPENCL) || defined(HAVE_CUDA)
+#if defined(HAVE_OPENCL)
 			advance_cursor();
 #endif
 			/* 2. Perform a limited crypt (in case it matters) */
 			if (format->methods.crypt_all(&min, db->salts) != min)
 				return "crypt_all";
 #endif
-#if defined(HAVE_OPENCL) || defined(HAVE_CUDA)
+#if defined(HAVE_OPENCL)
 			advance_cursor();
 #endif
 			/* 3. Now read them back and verify they are intact */
@@ -873,7 +891,7 @@ static char *fmt_self_test_body(struct fmt_main *format,
 				format->methods.clear_keys();
 			fmt_set_key(current->plaintext, index);
 		}
-#if !defined(BENCH_BUILD) && (defined(HAVE_OPENCL) || defined(HAVE_CUDA))
+#if !defined(BENCH_BUILD) && defined(HAVE_OPENCL)
 		advance_cursor();
 #endif
 		if (full_lvl >= 0) {
@@ -923,10 +941,9 @@ static char *fmt_self_test_body(struct fmt_main *format,
 		}
 
 		if (!(++current)->ciphertext) {
-#if defined(HAVE_OPENCL) || defined(HAVE_CUDA)
+#if defined(HAVE_OPENCL)
 /* Jump straight to last index for GPU formats but always call set_key() */
-			if (strstr(format->params.label, "-opencl") ||
-			    strstr(format->params.label, "-cuda")) {
+			if (strstr(format->params.label, "-opencl")) {
 				for (i = index + 1; i < max - 1; i++)
 				    fmt_set_key(longcand(format, i, sl), i);
 				index = max - 1;
@@ -988,6 +1005,16 @@ static char *fmt_self_test_body(struct fmt_main *format,
  * printable ASCII characters according to the spec. IEEE Std. 802.11i-2004,
  * Annex H.4.1: Each character in the pass-phrase must have an encoding in
  * the range of 32 to 126 (decimal), inclusive.
+ */
+				if (format->params.flags & FMT_8_BIT) {
+					snprintf(s_size, sizeof(s_size),
+						"%s should not set FMT_8_BIT",
+						format->params.label);
+					return s_size;
+				}
+			} else if (!strncasecmp(format->params.label, "sl3", 3)) {
+/*
+ * The SL3 format technically handles 8-bit but the "passwords" are all digits.
  */
 				if (format->params.flags & FMT_8_BIT) {
 					snprintf(s_size, sizeof(s_size),
@@ -1696,37 +1723,37 @@ int fmt_default_binary_hash(void *binary)
 
 int fmt_default_binary_hash_0(void * binary)
 {
-	return *(ARCH_WORD_32 *) binary & PH_MASK_0;
+	return *(uint32_t *) binary & PH_MASK_0;
 }
 
 int fmt_default_binary_hash_1(void * binary)
 {
-	return *(ARCH_WORD_32 *) binary & PH_MASK_1;
+	return *(uint32_t *) binary & PH_MASK_1;
 }
 
 int fmt_default_binary_hash_2(void * binary)
 {
-	return *(ARCH_WORD_32 *) binary & PH_MASK_2;
+	return *(uint32_t *) binary & PH_MASK_2;
 }
 
 int fmt_default_binary_hash_3(void * binary)
 {
-	return *(ARCH_WORD_32 *) binary & PH_MASK_3;
+	return *(uint32_t *) binary & PH_MASK_3;
 }
 
 int fmt_default_binary_hash_4(void * binary)
 {
-	return *(ARCH_WORD_32 *) binary & PH_MASK_4;
+	return *(uint32_t *) binary & PH_MASK_4;
 }
 
 int fmt_default_binary_hash_5(void * binary)
 {
-	return *(ARCH_WORD_32 *) binary & PH_MASK_5;
+	return *(uint32_t *) binary & PH_MASK_5;
 }
 
 int fmt_default_binary_hash_6(void * binary)
 {
-	return *(ARCH_WORD_32 *) binary & PH_MASK_6;
+	return *(uint32_t *) binary & PH_MASK_6;
 }
 
 int fmt_default_salt_hash(void *salt)

@@ -1,14 +1,6 @@
 language: c
 dist: trusty
-branches:
-  except:
-    gh-pages
-compiler:
-  - gcc
-  - clang
-env:
-  # Default build. Release.
-  # Debug build
+services: docker
 
 env:
   global:
@@ -17,19 +9,51 @@ env:
    - secure: "FJ1/E5vVttd4+cFLQVdFt4rHNX28aGIvAWXduy6ZqQgZbfa0omsHcZXAq0t1qFz14ryTxEtxqY/aXw6OSG+t6a8OyrOi9jEdTIUpEDCyPvdZ299injPt1SiJRxzoDNo1CquwUE20y2pFOnTpVp6bIkH49o0oAxBijtb5fDj54KY="
 
 matrix:
+  include:
+  - os: linux
+    compiler: gcc
+    env: ASAN="--enable-asan" OPENCL="yes"
+
+  - os: linux
+    compiler: clang
+    env: ASAN="" OPENCL="yes"
+
+  - os: linux
+    env: ASAN="--enable-asan" TEST="fresh test"
+
+  - os: linux
+    env: ASAN="" TEST="TS --restore"
+
+  - os: linux
+    env: ASAN="" TEST="no OpenMP" OPENCL="yes"
+
+  - os: osx
+    osx_image: xcode8.3
+    env: ASAN="" OPENCL="yes"
+
   allow_failures:
+  - os: linux
+    env: ASAN="--enable-asan" OPENCL="yes"
+
+  - os: linux
+    env: ASAN="" OPENCL="yes"
+
+  - os: linux
+    env: ASAN="--enable-asan" TEST="fresh test"
+
+  - os: linux
+    env: ASAN="" TEST="TS --restore"
+
+  - os: linux
+    env: ASAN="" TEST="no OpenMP" OPENCL="yes"
+
+  fast_finish: true
 
 before_install:
-  - sudo apt-get update -qq
-  - sudo apt-get install libssl-dev yasm libgmp-dev libpcap-dev pkg-config debhelper libnet1-dev
-  - sudo apt-get install fglrx-dev opencl-headers || true
   - export OMP_NUM_THREADS=4
+
 script:
-  - cd src 
-  - if [[ "$CC" == "gcc" ]]; then ./configure --enable-asan; fi
-  - if [[ "$CC" == "clang" ]]; then ./configure; fi
-  - make -sj4 
-  - ../.travis/test.sh
+  - .travis/check.sh
 
 addons:
   coverity_scan:

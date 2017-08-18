@@ -105,7 +105,7 @@ static struct fmt_tests tests[] = {
 };
 
 static char (*saved_key)[PLAINTEXT_LENGTH + 1];
-static ARCH_WORD_32 (*crypt_out)[BINARY_SIZE / sizeof(ARCH_WORD_32)];
+static uint32_t (*crypt_out)[BINARY_SIZE / sizeof(uint32_t)];
 
 static struct custom_salt {
 	int etype;
@@ -277,7 +277,7 @@ static int valid(char *ciphertext, struct fmt_main *self)
 
 	// We support a max. total salt length of 52.
 	// We could opt to emit a warning if rejected here.
-	if(saltlen > MAX_SALTLEN) {
+	if (saltlen > MAX_SALTLEN) {
 		static int warned = 0;
 
 		if (!ldr_in_pot)

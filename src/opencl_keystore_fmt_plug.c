@@ -45,15 +45,11 @@ john_register_one(&fmt_opencl_keystore);
 #include "options.h"
 #include "keystore_common.h"
 
-#ifdef _OPENMP
-#include <omp.h>
-#endif
-
 #include "memdbg.h"
 
 #define FORMAT_LABEL		"keystore-opencl"
 #define FORMAT_NAME			"Java KeyStore"
-#define ALGORITHM_NAME		"SHA1 32/" ARCH_BITS_STR
+#define ALGORITHM_NAME		"SHA1 OpenCL"
 #define BENCHMARK_COMMENT	""
 #define BENCHMARK_LENGTH	0
 // reduced PLAIN_LEN from 125 bytes, and speed went from 12.2k to 16.4k
@@ -88,16 +84,12 @@ static struct custom_salt {
 
 static struct fmt_main   *self;
 
-static size_t insize,
-       	   	  outsize,
-			  saltsize;
+static size_t insize, outsize, saltsize;
 
 static keystore_password *inbuffer;
 static keystore_hash     *outbuffer;
 static keystore_salt      saltbuffer;
-static cl_mem mem_in,
-              mem_out,
-			  mem_salt;
+static cl_mem mem_in, mem_out, mem_salt;
 
 static cl_int cl_err;
 
@@ -310,66 +302,13 @@ static int crypt_all(int *pcount, struct db_salt *salt)
 
 	///Await completion of all the above
 	BENCH_CLERROR(clFinish(queue[gpu_id]), "clFinish error");
-/*
-	if (ocl_autotune_running)
-		return count;
 
-#ifdef _OPENMP
-#pragma omp parallel for
-#endif
-	for (index = 0; index < count; index++)
-		if (memcmp(outbuffer[index].key//)
-		{
-			cracked[index] = 1;
-#ifdef _OPENMP
-#pragma omp atomic
-#endif
-		any_cracked |= 1;
-	}
-*/
 	return count;
 }
 
-/*tbw useful in debugging in cmp_all() keep for the mo ...
- 	uint8_t out[20];
-
-	SHA_CTX ctx;
-
-printf("\n");
-printf("cmp_all() - count =%i\n", count);
-printf("cmp_all() - pass length: %i\n",inbuffer[0].length);
-printf("cmp_all() - pass: %s\n", get_key(0));
-printf("cmp_all() - hash: %x %x %x %x %x\n",
-		outbuffer[0].key[0],
-		outbuffer[0].key[1],
-		outbuffer[0].key[2],
-		outbuffer[0].key[3],
-		outbuffer[0].key[4]);
-printf("cmp_all() - binary: %x %x %x %x %x\n",
-		((uint32_t *)binary)[0],
-		((uint32_t *)binary)[1],
-		((uint32_t *)binary)[2],
-		((uint32_t *)binary)[3],
-		((uint32_t *)binary)[4]);
-printf("----------------------------------------\n");
-
-	SHA1_Init(&ctx);
-	SHA1_Update(&ctx,inbuffer[0].pass,inbuffer[0].length);
-	SHA1_Update(&ctx,saltbuffer.salt,saltbuffer.length);
-	SHA1_Final(out, &ctx);
-	printf("cmp_all() - SHA1 hash: %x %x %x %x %x\n",
-			((uint32_t *)out)[0],
-			((uint32_t *)out)[1],
-			((uint32_t *)out)[2],
-			((uint32_t *)out)[3],
-			((uint32_t *)out)[4]);
-
-*/
-
-
 static int cmp_all(void *binary, int count)
 {
-	uint32_t i, b = ((ARCH_WORD_32 *)binary)[0];
+	uint32_t i, b = ((uint32_t *)binary)[0];
 
 	for (i = 0; i < count; ++i) {
 		if (b == outbuffer[i].gpu_out) {
@@ -381,7 +320,7 @@ static int cmp_all(void *binary, int count)
 
 static int cmp_one(void *binary, int index)
 {
-	if (((ARCH_WORD_32*)binary)[0] != outbuffer[index].gpu_out) {
+	if (((uint32_t*)binary)[0] != outbuffer[index].gpu_out) {
 		return 0;
 	}
 	return 1;
@@ -423,7 +362,7 @@ struct fmt_main fmt_opencl_keystore = {
 		SALT_ALIGN,
 		MIN_KEYS_PER_CRYPT,
 		MAX_KEYS_PER_CRYPT,
-		FMT_CASE | FMT_8_BIT | FMT_OMP,
+		FMT_CASE | FMT_8_BIT | FMT_HUGE_INPUT,
 		/* FIXME: report cur_salt->length as tunable cost? */
 		{ NULL },
 		{ FORMAT_TAG },
@@ -440,7 +379,7 @@ struct fmt_main fmt_opencl_keystore = {
 		{ NULL },
 		fmt_default_source,
 		{
-			fmt_default_binary_hash /* Not usable with $SOURCE_HASH$ */
+			fmt_default_binary_hash
 		},
 		fmt_default_salt_hash,
 		NULL,
@@ -450,7 +389,7 @@ struct fmt_main fmt_opencl_keystore = {
 		fmt_default_clear_keys,
 		crypt_all,
 		{
-			fmt_default_get_hash /* Not usable with $SOURCE_HASH$ */
+			fmt_default_get_hash
 		},
 		cmp_all,
 		cmp_one,

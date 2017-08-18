@@ -70,19 +70,9 @@ static int omp_t = 1;
 
 /* taken from eCryptfs */
 #define ECRYPTFS_DEFAULT_NUM_HASH_ITERATIONS 65536
-#define ECRYPTFS_MAX_PASSWORD_LENGTH 64
-#define ECRYPTFS_MAX_PASSPHRASE_BYTES ECRYPTFS_MAX_PASSWORD_LENGTH
 #define ECRYPTFS_SALT_SIZE 8
-#define ECRYPTFS_SALT_SIZE_HEX (ECRYPTFS_SALT_SIZE*2)
 #define ECRYPTFS_DEFAULT_SALT "\x00\x11\x22\x33\x44\x55\x66\x77"
-#define ECRYPTFS_DEFAULT_SALT_HEX "0011223344556677"
-#define ECRYPTFS_DEFAULT_SALT_FNEK_HEX "9988776655443322"
 #define ECRYPTFS_SIG_SIZE 8
-#define ECRYPTFS_SIG_SIZE_HEX (ECRYPTFS_SIG_SIZE*2)
-#define ECRYPTFS_PASSWORD_SIG_SIZE ECRYPTFS_SIG_SIZE_HEX
-#define ECRYPTFS_MAX_KEY_BYTES 64
-#define ECRYPTFS_MAX_ENCRYPTED_KEY_BYTES 512
-#define ECRYPTFS_DEFAULT_IV_BYTES 16
 
 static struct fmt_tests ecryptfs_tests[] = {
 	/* hash ==> first 16 bytes of ~/.ecryptfs/wrapped-passphrase */
@@ -96,12 +86,12 @@ static struct fmt_tests ecryptfs_tests[] = {
 };
 
 static char (*saved_key)[PLAINTEXT_LENGTH + 1];
-static ARCH_WORD_32 (*crypt_out)[BINARY_SIZE / sizeof(ARCH_WORD_32)];
+static uint32_t (*crypt_out)[BINARY_SIZE / sizeof(uint32_t)];
 
 static struct custom_salt {
 	int iterations; // really really unused (even in the original code)
 	int salt_length;
-	char unsigned salt[ECRYPTFS_SALT_SIZE + 1];
+	unsigned char salt[ECRYPTFS_SALT_SIZE + 1];
 } *cur_salt;
 
 static void init(struct fmt_main *self)
@@ -178,7 +168,7 @@ static void *get_binary(char *ciphertext)
 {
 	static union {
 		unsigned char c[REAL_BINARY_SIZE];
-		ARCH_WORD_32 dummy;
+		uint32_t dummy;
 	} buf;
 	unsigned char *out = buf.c;
 	int i;
@@ -222,10 +212,10 @@ static int crypt_all(int *pcount, struct db_salt *salt)
 		unsigned char tmpBuf[64];
 		unsigned int i;
 		unsigned char _IBuf[128*MAX_KEYS_PER_CRYPT+MEM_ALIGN_CACHE], *keys;
-		ARCH_WORD_64 *keys64;
+		uint64_t *keys64;
 
 		keys = (unsigned char*)mem_align(_IBuf, MEM_ALIGN_CACHE);
-		keys64 = (ARCH_WORD_64*)keys;
+		keys64 = (uint64_t*)keys;
 		memset(keys, 0, 128*MAX_KEYS_PER_CRYPT);
 
 		for (i = 0; i < MAX_KEYS_PER_CRYPT; ++i) {
@@ -242,7 +232,7 @@ static int crypt_all(int *pcount, struct db_salt *salt)
 		for (j = 1; j < ECRYPTFS_DEFAULT_NUM_HASH_ITERATIONS; j++)
 			SIMDSHA512body(keys, keys64, NULL, SSEi_MIXED_IN|SSEi_OUTPUT_AS_INP_FMT);
 		// Last one with FLAT_OUT
-		SIMDSHA512body(keys, (ARCH_WORD_64*)crypt_out[index], NULL, SSEi_MIXED_IN|SSEi_OUTPUT_AS_INP_FMT|SSEi_FLAT_OUT);
+		SIMDSHA512body(keys, (uint64_t*)crypt_out[index], NULL, SSEi_MIXED_IN|SSEi_OUTPUT_AS_INP_FMT|SSEi_FLAT_OUT);
 #else
 		SHA512_Init(&ctx);
 		SHA512_Update(&ctx, cur_salt->salt, ECRYPTFS_SALT_SIZE);

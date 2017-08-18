@@ -104,13 +104,12 @@ static unsigned char (*sse_crypt1);
 static unsigned char (*sse_crypt2);
 
 #else
-# define MS_NUM_KEYS			1
+ #define MS_NUM_KEYS			1
 #endif
 
 #define MIN_KEYS_PER_CRYPT		MS_NUM_KEYS
 #define MAX_KEYS_PER_CRYPT		MS_NUM_KEYS
 
-#define U16_KEY_LEN			(2*PLAINTEXT_LENGTH)
 #define HASH_LEN			(16+48)
 
 static unsigned char *salt_buffer;
@@ -186,48 +185,40 @@ static void set_salt(void *salt) {
 	salt_buffer = (unsigned char*)p;
 }
 
-static void *get_salt(char *_ciphertext)
+static void *get_salt(char *ciphertext)
 {
-	unsigned char *ciphertext = (unsigned char *)_ciphertext;
 	static UTF16 out[130+1];
 	unsigned char input[MAX_SALT_LEN*3+1];
-	int iterations, utf16len, md4_size;
+	int i, iterations, utf16len;
+	char *lasth = strrchr(ciphertext, '#');
 
 	memset(out, 0, sizeof(out));
 
-	ciphertext += FORMAT_TAG2_LEN;
+	sscanf(&ciphertext[6], "%d", &iterations);
+	ciphertext = strchr(ciphertext, '#') + 1;
 
-	while (*ciphertext && *ciphertext != '#') ++ciphertext;
-	++ciphertext;
-	for (md4_size=0;md4_size<sizeof(input)-1;md4_size++) {
-		if (ciphertext[md4_size] == '#')
-			break;
-		input[md4_size] = ciphertext[md4_size];
-	}
-	input[md4_size] = 0;
+	for (i = 0; &ciphertext[i] < lasth; i++)
+		input[i] = (unsigned char)ciphertext[i];
+	input[i] = 0;
 
-	utf16len = enc_to_utf16(&out[2], MAX_SALT_LEN, input, md4_size);
+	utf16len = enc_to_utf16(&out[2], MAX_SALT_LEN, input, i);
 	if (utf16len < 0)
 		utf16len = strlen16(&out[2]);
 	out[0] = utf16len << 1;
-	sscanf(&_ciphertext[6], "%d", &iterations);
 	out[1] = iterations;
 	return out;
 }
 
-
 static void *get_binary(char *ciphertext)
 {
 	static unsigned int out[BINARY_SIZE / sizeof(unsigned int)];
-	unsigned int i = 0;
+	unsigned int i;
 	unsigned int temp;
 
-	for (; ciphertext[0] != '#'; ciphertext++);
-	ciphertext++;
-	for (; ciphertext[0] != '#'; ciphertext++);
-	ciphertext++;
+	/* We need to allow salt containing '#' so we search backwards */
+	ciphertext = strrchr(ciphertext, '#') + 1;
 
-	for (; i < 4 ;i++)
+	for (i = 0; i < 4 ;i++)
 	{
 #if ARCH_LITTLE_ENDIAN
 		temp  = ((unsigned int)(atoi16[ARCH_INDEX(ciphertext[i * 8 + 0])])) << 4;
@@ -424,9 +415,9 @@ static void pbkdf2_sse2(int t)
 	i2 = (unsigned int*)t_sse_crypt2;
 	o1 = (unsigned int*)t_sse_hash1;
 
-	for(k = 0; k < MS_NUM_KEYS; ++k)
+	for (k = 0; k < MS_NUM_KEYS; ++k)
 	{
-		for(i = 0;i < 4;i++) {
+		for (i = 0;i < 4;i++) {
 			ipad[i] = t_crypt[k*4+i]^0x36363636;
 			opad[i] = t_crypt[k*4+i]^0x5C5C5C5C;
 		}
@@ -468,14 +459,14 @@ static void pbkdf2_sse2(int t)
 		o1[(k/SIMD_COEF_32)*SIMD_COEF_32*SHA_BUF_SIZ+(k&(SIMD_COEF_32-1))+(SIMD_COEF_32<<2)]                   = ctx2.h4;
 	}
 
-	for(i = 1; i < iteration_cnt; i++)
+	for (i = 1; i < iteration_cnt; i++)
 	{
 		SIMDSHA1body((unsigned int*)t_sse_hash1, (unsigned int*)t_sse_hash1, (unsigned int*)t_sse_crypt1, SSEi_MIXED_IN|SSEi_RELOAD|SSEi_OUTPUT_AS_INP_FMT);
 		SIMDSHA1body((unsigned int*)t_sse_hash1, (unsigned int*)t_sse_hash1, (unsigned int*)t_sse_crypt2, SSEi_MIXED_IN|SSEi_RELOAD|SSEi_OUTPUT_AS_INP_FMT);
 		// only xor first 16 bytes, since that is ALL this format uses
 		for (k = 0; k < MS_NUM_KEYS; k++) {
 			unsigned *p = &((unsigned int*)t_sse_hash1)[k/SIMD_COEF_32*SHA_BUF_SIZ*SIMD_COEF_32 + (k&(SIMD_COEF_32-1))];
-			for(j = 0; j < 4; j++)
+			for (j = 0; j < 4; j++)
 				t_crypt[k*4+j] ^= p[(j*SIMD_COEF_32)];
 		}
 	}
@@ -495,7 +486,7 @@ static void pbkdf2(unsigned int _key[]) // key is also 'final' digest.
 	unsigned i, j;
 	unsigned char *key = (unsigned char*)_key;
 
-	for(i = 0; i < 16; i++) {
+	for (i = 0; i < 16; i++) {
 		ipad[i] = key[i]^0x36;
 		opad[i] = key[i]^0x5C;
 	}
@@ -524,7 +515,7 @@ static void pbkdf2(unsigned int _key[]) // key is also 'final' digest.
 	// only copy first 16 bytes, since that is ALL this format uses
 	memcpy(_key, tmp_hash, 16);
 
-	for(i = 1; i < iteration_cnt; i++)
+	for (i = 1; i < iteration_cnt; i++)
 	{
 		// we only need to copy the accumulator data from the CTX, since
 		// the original encryption was a full block of 64 bytes.
@@ -537,7 +528,7 @@ static void pbkdf2(unsigned int _key[]) // key is also 'final' digest.
 		SHA1_Final((unsigned char*)tmp_hash, &ctx2);
 
 		// only xor first 16 bytes, since that is ALL this format uses
-		for(j = 0; j < 4; j++)
+		for (j = 0; j < 4; j++)
 			_key[j] ^= tmp_hash[j];
 	}
 }

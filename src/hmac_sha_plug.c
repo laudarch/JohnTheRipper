@@ -14,12 +14,13 @@
  * purpose, in source and binary forms, with or without modification.
  */
 
+#include <stdint.h>
+
 #include "arch.h"
 #include "aligned.h"
 #include "sha.h"
 #include "sha2.h"
 #include "common.h"
-#include "stdint.h"
 
 #if ARCH_BITS==64
 #define HMAC_SHA32_COUNT  8
@@ -42,7 +43,7 @@ void JTR_hmac_sha1(const unsigned char *key, int key_len, const unsigned char *d
 
 	if (key_len > 64) {
 		uint32_t *p = (uint32_t*)buf;
-		SHA_Init(&ctx);
+		SHA1_Init(&ctx);
 		SHA1_Update(&ctx, key, key_len);
 		SHA1_Final(buf, &ctx);
 		p[0] ^= 0x36363636; p[1] ^= 0x36363636; p[2] ^= 0x36363636; p[3] ^= 0x36363636; p[4] ^= 0x36363636;
@@ -53,14 +54,14 @@ void JTR_hmac_sha1(const unsigned char *key, int key_len, const unsigned char *d
 		for (i = 0; i < HMAC_SHA32_COUNT; ++i)
 			pW[i] ^= HMAC_SHA_IPAD_XOR;
 	}
-	SHA_Init(&ctx);
+	SHA1_Init(&ctx);
 	SHA1_Update(&ctx, buf, 64);
 	if (data_len)
 		SHA1_Update(&ctx, data, data_len);
 	SHA1_Final(local_digest, &ctx);
 	for (i = 0; i < HMAC_SHA32_COUNT; ++i)
 		pW[i] ^= HMAC_SHA_OPAD_XOR;
-	SHA_Init(&ctx);
+	SHA1_Init(&ctx);
 	SHA1_Update(&ctx, buf, 64);
 	SHA1_Update(&ctx, local_digest, 20);
 	if (digest_len >= 20)

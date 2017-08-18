@@ -22,7 +22,7 @@
  * and we test against the 'TRUE' signature, and against 2 crc32's which
  * are computed over the 448 bytes of decrypted data.  So we now have a
  * full 96 bits of hash.  There will be no way we get false positives from
- * this slow format. EVP_AES_XTS removed. Also, we now only pbkdf2 over
+ * this slow format. AES_XTS removed. Also, we now only pbkdf2 over
  * 64 bytes of data (all that is needed for the 2 AES keys), and that sped
  * up the crypts A LOT (~3x faster)
  *
@@ -187,7 +187,7 @@ static int valid(char* ciphertext, int pos)
 	q = strchr(p, '$');
 
 	if (!q) { /* no keyfiles */
-		if(pos + 512*2 != strlen(ciphertext))
+		if (pos + 512*2 != strlen(ciphertext))
 			return 0;
 	} else {
 		if (q - p != 512 * 2)
@@ -277,9 +277,9 @@ static void* get_salt(char *ciphertext)
 	}
 
 	// Convert the hexadecimal salt in binary
-	for(i = 0; i < 64; i++)
+	for (i = 0; i < 64; i++)
 		s->salt[i] = (atoi16[ARCH_INDEX(ciphertext[2*i])] << 4) | atoi16[ARCH_INDEX(ciphertext[2*i+1])];
-	for(; i < 512; i++)
+	for (; i < 512; i++)
 		s->bin[i-64] = (atoi16[ARCH_INDEX(ciphertext[2*i])] << 4) | atoi16[ARCH_INDEX(ciphertext[2*i+1])];
 
 	p = ciphertext;
@@ -381,7 +381,7 @@ static int crypt_all(int *pcount, struct db_salt *salt)
 #ifdef _OPENMP
 #pragma omp parallel for
 #endif
-	for(i = 0; i < count; i+=psalt->loop_inc)
+	for (i = 0; i < count; i+=psalt->loop_inc)
 	{
 		unsigned char key[64];
 #if SSE_GROUP_SZ_SHA512
@@ -596,7 +596,7 @@ struct fmt_main fmt_truecrypt = {
 		MIN_KEYS_PER_CRYPT,
 		MAX_KEYS_PER_CRYPT,
 #endif
-		FMT_CASE | FMT_8_BIT | FMT_OMP,
+		FMT_CASE | FMT_8_BIT | FMT_OMP | FMT_HUGE_INPUT,
 		{
 			"hash algorithm [1:SHA512 2:RIPEMD160 3:Whirlpool]",
 		},
@@ -620,7 +620,7 @@ struct fmt_main fmt_truecrypt = {
 		},
 		fmt_default_source,
 		{
-			fmt_default_binary_hash /* Not usable with $SOURCE_HASH$ */
+			fmt_default_binary_hash
 		},
 		salt_hash,
 		NULL,
@@ -630,7 +630,7 @@ struct fmt_main fmt_truecrypt = {
 		fmt_default_clear_keys,
 		crypt_all,
 		{
-			fmt_default_get_hash /* Not usable with $SOURCE_HASH$ */
+			fmt_default_get_hash
 		},
 		cmp_all,
 		cmp_one,
@@ -653,7 +653,7 @@ struct fmt_main fmt_truecrypt_ripemd160 = {
 		SALT_ALIGN,
 		MIN_KEYS_PER_CRYPT,
 		MAX_KEYS_PER_CRYPT,
-		FMT_CASE | FMT_8_BIT | FMT_OMP,
+		FMT_CASE | FMT_8_BIT | FMT_OMP | FMT_HUGE_INPUT,
 		{ NULL },
 		{ TAG_RIPEMD160 },
 		tests_ripemd160
@@ -669,7 +669,7 @@ struct fmt_main fmt_truecrypt_ripemd160 = {
 		{ NULL },
 		fmt_default_source,
 		{
-			fmt_default_binary_hash /* Not usable with $SOURCE_HASH$ */
+			fmt_default_binary_hash
 		},
 		salt_hash,
 		NULL,
@@ -679,7 +679,7 @@ struct fmt_main fmt_truecrypt_ripemd160 = {
 		fmt_default_clear_keys,
 		crypt_all,
 		{
-			fmt_default_get_hash /* Not usable with $SOURCE_HASH$ */
+			fmt_default_get_hash
 		},
 		cmp_all,
 		cmp_one,
@@ -715,7 +715,7 @@ struct fmt_main fmt_truecrypt_sha512 = {
 		MIN_KEYS_PER_CRYPT,
 		MAX_KEYS_PER_CRYPT,
 #endif
-		FMT_CASE | FMT_8_BIT | FMT_OMP,
+		FMT_CASE | FMT_8_BIT | FMT_OMP | FMT_HUGE_INPUT,
 		{ NULL },
 		{ TAG_SHA512 },
 		tests_sha512
@@ -731,7 +731,7 @@ struct fmt_main fmt_truecrypt_sha512 = {
 		{ NULL },
 		fmt_default_source,
 		{
-			fmt_default_binary_hash /* Not usable with $SOURCE_HASH$ */
+			fmt_default_binary_hash
 		},
 		salt_hash,
 		NULL,
@@ -741,7 +741,7 @@ struct fmt_main fmt_truecrypt_sha512 = {
 		fmt_default_clear_keys,
 		crypt_all,
 		{
-			fmt_default_get_hash /* Not usable with $SOURCE_HASH$ */
+			fmt_default_get_hash
 		},
 		cmp_all,
 		cmp_one,
@@ -768,7 +768,7 @@ struct fmt_main fmt_truecrypt_whirlpool = {
 		SALT_ALIGN,
 		MIN_KEYS_PER_CRYPT,
 		MAX_KEYS_PER_CRYPT,
-		FMT_CASE | FMT_8_BIT | FMT_OMP,
+		FMT_CASE | FMT_8_BIT | FMT_OMP | FMT_HUGE_INPUT,
 		{ NULL },
 		{ TAG_WHIRLPOOL },
 		tests_whirlpool
@@ -784,7 +784,7 @@ struct fmt_main fmt_truecrypt_whirlpool = {
 		{ NULL },
 		fmt_default_source,
 		{
-			fmt_default_binary_hash /* Not usable with $SOURCE_HASH$ */
+			fmt_default_binary_hash
 		},
 		salt_hash,
 		NULL,
@@ -794,7 +794,7 @@ struct fmt_main fmt_truecrypt_whirlpool = {
 		fmt_default_clear_keys,
 		crypt_all,
 		{
-			fmt_default_get_hash /* Not usable with $SOURCE_HASH$ */
+			fmt_default_get_hash
 		},
 		cmp_all,
 		cmp_one,

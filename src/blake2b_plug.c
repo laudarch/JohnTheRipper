@@ -12,7 +12,7 @@
    this software. If not, see <http://creativecommons.org/publicdomain/zero/1.0/>.
 */
 
-#include "stdint.h"
+#include <stdint.h>
 #include <string.h>
 #include <stdio.h>
 
@@ -45,21 +45,21 @@ JTR_ALIGN( 64 ) static const uint64_t blake2b_IV[8] =
 };
 
 /* Some helper functions, not necessarily useful */
-static inline int blake2b_set_lastnode( blake2b_state *S )
+inline static int blake2b_set_lastnode( blake2b_state *S )
 {
   S->f[1] = ~0ULL;
   return 0;
 }
 
-static inline int blake2b_set_lastblock( blake2b_state *S )
+inline static int blake2b_set_lastblock( blake2b_state *S )
 {
-  if( S->last_node ) blake2b_set_lastnode( S );
+  if ( S->last_node ) blake2b_set_lastnode( S );
 
   S->f[0] = ~0ULL;
   return 0;
 }
 
-static inline int blake2b_increment_counter( blake2b_state *S, const uint64_t inc )
+inline static int blake2b_increment_counter( blake2b_state *S, const uint64_t inc )
 {
 #if __x86_64__
   // ADD/ADC chain
@@ -87,7 +87,7 @@ int blake2b_init_param( blake2b_state *S, const blake2b_param *P )
   /* IV XOR ParamBlock */
   memset( S, 0, sizeof( blake2b_state ) );
 
-  for( i = 0; i < BLAKE2B_OUTBYTES; ++i ) h[i] = v[i] ^ p[i];
+  for ( i = 0; i < BLAKE2B_OUTBYTES; ++i ) h[i] = v[i] ^ p[i];
 
   return 0;
 }
@@ -135,7 +135,7 @@ int blake2b_init_key( blake2b_state *S, const uint8_t outlen, const void *key, c
 
   if ( ( !keylen ) || keylen > BLAKE2B_KEYBYTES ) return -1;
 
-  if( blake2b_init_param( S, &P ) < 0 )
+  if ( blake2b_init_param( S, &P ) < 0 )
     return 0;
 
   {
@@ -148,7 +148,7 @@ int blake2b_init_key( blake2b_state *S, const uint8_t outlen, const void *key, c
   return 0;
 }
 
-static inline int blake2b_compress( blake2b_state *S, const uint8_t block[BLAKE2B_BLOCKBYTES] )
+inline static int blake2b_compress( blake2b_state *S, const uint8_t block[BLAKE2B_BLOCKBYTES] )
 {
   __m128i row1l, row1h;
   __m128i row2l, row2h;
@@ -226,7 +226,7 @@ int blake2b_update( blake2b_state *S, const uint8_t *in, uint64_t inlen )
     size_t left = S->buflen;
     size_t fill = 2 * BLAKE2B_BLOCKBYTES - left;
 
-    if( inlen > fill )
+    if ( inlen > fill )
     {
       memcpy( S->buf + left, in, fill ); // Fill buffer
       S->buflen += fill;
@@ -252,7 +252,7 @@ int blake2b_update( blake2b_state *S, const uint8_t *in, uint64_t inlen )
 
 int blake2b_final( blake2b_state *S, uint8_t *out, uint8_t outlen )
 {
-  if( S->buflen > BLAKE2B_BLOCKBYTES )
+  if ( S->buflen > BLAKE2B_BLOCKBYTES )
   {
     blake2b_increment_counter( S, BLAKE2B_BLOCKBYTES );
     blake2b_compress( S, S->buf );
@@ -278,15 +278,15 @@ int blake2b( uint8_t *out, const void *in, const void *key, const uint8_t outlen
 
   if ( NULL == out ) return -1;
 
-  if( NULL == key ) keylen = 0;
+  if ( NULL == key ) keylen = 0;
 
-  if( keylen )
+  if ( keylen )
   {
-    if( blake2b_init_key( S, outlen, key, keylen ) < 0 ) return -1;
+    if ( blake2b_init_key( S, outlen, key, keylen ) < 0 ) return -1;
   }
   else
   {
-    if( blake2b_init( S, outlen ) < 0 ) return -1;
+    if ( blake2b_init( S, outlen ) < 0 ) return -1;
   }
 
   blake2b_update( S, ( uint8_t * )in, inlen );

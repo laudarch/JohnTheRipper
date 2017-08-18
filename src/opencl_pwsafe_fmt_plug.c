@@ -20,11 +20,11 @@ john_register_one(&fmt_opencl_pwsafe);
 #include <string.h>
 #include <assert.h>
 #include <errno.h>
+#include <stdint.h>
 
 #include "arch.h"
 #include "misc.h"
 #include "common.h"
-#include "stdint.h"
 #include "formats.h"
 #include "params.h"
 #include "options.h"
@@ -72,7 +72,7 @@ static size_t get_task_max_work_group_size()
 		autotune_get_task_max_work_group_size(FALSE, 0, finish_kernel));
 }
 
-# define SWAP32(n) \
+ #define SWAP32(n) \
     (((n) << 24) | (((n) & 0xff00) << 8) | (((n) >> 8) & 0xff00) | ((n) >> 24))
 
 static int split_events[3] = { 2, -1, -1 };
@@ -312,7 +312,7 @@ static int crypt_all(int *pcount, struct db_salt *salt)
 		0, NULL, multi_profilingEvent[1]), "Set ND range");
 
 	///Run kernel
-	for(i = 0; i < (ocl_autotune_running ? 1 : 8); i++)
+	for (i = 0; i < (ocl_autotune_running ? 1 : 8); i++)
 	{
 		BENCH_CLERROR(clEnqueueNDRangeKernel
 			(queue[gpu_id], crypt_kernel, 1, NULL, &global_work_size, lws,

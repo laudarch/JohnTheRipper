@@ -41,7 +41,7 @@ john_register_one(&fmt_as400des);
 #define CIPHERTEXT_LENGTH       16
 #define BINARY_SIZE             8
 #define SALT_SIZE               sizeof(struct custom_salt)
-#define BINARY_ALIGN            sizeof(ARCH_WORD_32)
+#define BINARY_ALIGN            sizeof(uint32_t)
 #define SALT_ALIGN              1
 #define MIN_KEYS_PER_CRYPT      1
 #define MAX_KEYS_PER_CRYPT      1
@@ -101,7 +101,7 @@ static void process_userid(unsigned char *str)
 {
 	int i;
 
-	if(strlen((const char*)str)<=8) // if length userid <8 --> rightpad with spaces
+	if (strlen((const char*)str)<=8) // if length userid <8 --> rightpad with spaces
 	{
 		for (i = strlen((const char*)str); i < 8; ++i)
 			str[i] = 0x40;
@@ -112,7 +112,7 @@ static void process_userid(unsigned char *str)
 		// if length userid is 9 or 10 --> do bitswitch operation to create userid of length 8
 
 		// if length=9, right pad with spaces to length of 10
-		if(strlen((const char*)str)==9)
+		if (strlen((const char*)str)==9)
 		{
 			str[9] = 0x40;
 			str[10] = 0;
@@ -153,7 +153,7 @@ static struct custom_salt {
 	unsigned char userid[10 + 1];
 } *cur_salt;
 static char (*saved_key)[PLAINTEXT_LENGTH + 1];
-static ARCH_WORD_32 (*crypt_out)[BINARY_SIZE / sizeof(ARCH_WORD_32)];
+static uint32_t (*crypt_out)[BINARY_SIZE / sizeof(uint32_t)];
 
 static void init(struct fmt_main *self)
 {
@@ -182,7 +182,7 @@ static int valid(char *ciphertext, struct fmt_main *self)
 	keeptr = ctcopy;
 	ctcopy += FORMAT_TAG_LEN;
 	p = strtokm(ctcopy, "*"); /* username */
-	if(!p)
+	if (!p)
 		goto err;
 	if ((p = strtokm(NULL, "*")) == NULL)	/* hash */
 		goto err;
@@ -264,7 +264,7 @@ static int crypt_all(int *pcount, struct db_salt *salt)
 
 		if (saved_key_length <= 8) {
 			/* process key */
-			for(i = 0; saved_key[index][i]; i++)
+			for (i = 0; saved_key[index][i]; i++)
 				des_key[i] = a2e_precomputed[ARCH_INDEX(saved_key[index][i])];
 
 			/* replace missing characters in password by (EBCDIC space (0x40) XOR 0x55) << 1 */
@@ -282,10 +282,10 @@ static int crypt_all(int *pcount, struct db_salt *salt)
 			unsigned char output[8];
 
 			/* process key */
-			for(i = 0; i < 8; i++)
+			for (i = 0; i < 8; i++)
 				des_key1[i] = a2e_precomputed[ARCH_INDEX(saved_key[index][i])];
 
-			for(i = 0; i < saved_key_length-8; i++)
+			for (i = 0; i < saved_key_length-8; i++)
 				des_key2[i] = a2e_precomputed[ARCH_INDEX(saved_key[index][8+i])];
 
 			/* replace missing characters in password by (EBCDIC space (0x40) XOR 0x55) << 1 */

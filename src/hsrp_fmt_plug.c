@@ -60,7 +60,7 @@ john_register_one(&fmt_hsrp);
 #define BENCHMARK_LENGTH        0
 #define PLAINTEXT_LENGTH        55 // Must fit in a single MD5 block
 #define BINARY_SIZE             16
-#define BINARY_ALIGN            sizeof(ARCH_WORD_32)
+#define BINARY_ALIGN            sizeof(uint32_t)
 #define SALT_SIZE               sizeof(struct custom_salt)
 #define REAL_SALT_SIZE          50
 #define SALT_ALIGN              sizeof(int)
@@ -80,7 +80,7 @@ static struct fmt_tests tests[] = {
 static char (*saved_key)[64];	// 1 full limb of MD5, we do out work IN this buffer.
 static MD5_CTX (*saved_ctx);
 static int *saved_len, dirty;
-static ARCH_WORD_32 (*crypt_out)[BINARY_SIZE / sizeof(ARCH_WORD_32)];
+static uint32_t (*crypt_out)[BINARY_SIZE / sizeof(uint32_t)];
 
 static struct custom_salt {
 	int length;
@@ -121,8 +121,10 @@ static int valid(char *ciphertext, struct fmt_main *self)
 
 	p = ciphertext;
 
-	if (!strncmp(p, FORMAT_TAG, TAG_LENGTH))
-		p += TAG_LENGTH;
+	if (strncmp(p, FORMAT_TAG, TAG_LENGTH))
+		return 0;
+
+	p += TAG_LENGTH;
 
 	q = strrchr(ciphertext, '$');
 	if (!q || q+1==p)
@@ -188,8 +190,6 @@ static void set_salt(void *salt)
 	cur_salt = (struct custom_salt *)salt;
 }
 
-// this place would normally contain "print_hex" but I do not want to piss of magnum (yet again)
-
 #define PUTCHAR(buf, index, val) ((unsigned char*)(buf))[index] = (val)
 
 static int crypt_all(int *pcount, struct db_salt *salt)
@@ -235,7 +235,7 @@ static int cmp_all(void *binary, int count)
 #ifdef _OPENMP
 	for (; index < count; index++)
 #endif
-		if (((ARCH_WORD_32*)binary)[0] == crypt_out[index][0])
+		if (((uint32_t*)binary)[0] == crypt_out[index][0])
 			return 1;
 	return 0;
 }
@@ -281,7 +281,7 @@ struct fmt_main fmt_hsrp = {
 		SALT_ALIGN,
 		MIN_KEYS_PER_CRYPT,
 		MAX_KEYS_PER_CRYPT,
-		FMT_CASE | FMT_8_BIT | FMT_OMP,
+		FMT_CASE | FMT_8_BIT | FMT_OMP | FMT_HUGE_INPUT,
 		{ NULL },
 		{ FORMAT_TAG },
 		tests
@@ -297,7 +297,7 @@ struct fmt_main fmt_hsrp = {
 		{ NULL },
 		fmt_default_source,
 		{
-			fmt_default_binary_hash /* Not usable with $SOURCE_HASH$ */
+			fmt_default_binary_hash
 		},
 		fmt_default_salt_hash,
 		NULL,
@@ -307,7 +307,7 @@ struct fmt_main fmt_hsrp = {
 		fmt_default_clear_keys,
 		crypt_all,
 		{
-			fmt_default_get_hash /* Not usable with $SOURCE_HASH$ */
+			fmt_default_get_hash
 		},
 		cmp_all,
 		cmp_one,

@@ -23,6 +23,7 @@ john_register_one(&fmt_pbkdf2_hmac_sha512);
 #include <ctype.h>
 #include <string.h>
 #include <assert.h>
+#include <stdint.h>
 
 #include "misc.h"
 #include "arch.h"
@@ -30,7 +31,6 @@ john_register_one(&fmt_pbkdf2_hmac_sha512);
 #include "formats.h"
 #include "sha2.h"
 #include "johnswap.h"
-#include "stdint.h"
 #include "pbkdf2_hmac_common.h"
 #include "pbkdf2_hmac_sha512.h"
 
@@ -76,7 +76,7 @@ static struct custom_salt {
 } *cur_salt;
 
 static char (*saved_key)[PLAINTEXT_LENGTH + 1];
-static ARCH_WORD_32 (*crypt_out)[PBKDF2_SHA512_BINARY_SIZE / sizeof(ARCH_WORD_32)];
+static uint32_t (*crypt_out)[PBKDF2_SHA512_BINARY_SIZE / sizeof(uint32_t)];
 
 static void init(struct fmt_main *self)
 {
@@ -148,7 +148,7 @@ static int crypt_all(int *pcount, struct db_salt *salt)
 		int lens[SSE_GROUP_SZ_SHA512], i;
 		unsigned char *pin[SSE_GROUP_SZ_SHA512];
 		union {
-			ARCH_WORD_32 *pout[SSE_GROUP_SZ_SHA512];
+			uint32_t *pout[SSE_GROUP_SZ_SHA512];
 			unsigned char *poutc;
 		} x;
 		for (i = 0; i < SSE_GROUP_SZ_SHA512; ++i) {
@@ -217,7 +217,7 @@ struct fmt_main fmt_pbkdf2_hmac_sha512 = {
 		0,
 		PLAINTEXT_LENGTH,
 		PBKDF2_SHA512_BINARY_SIZE,
-		sizeof(ARCH_WORD_32),
+		sizeof(uint32_t),
 		SALT_SIZE,
 		sizeof(ARCH_WORD),
 		MIN_KEYS_PER_CRYPT,

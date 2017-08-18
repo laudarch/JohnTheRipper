@@ -50,7 +50,7 @@ john_register_one(&fmt_odf);
 #define BINARY_SIZE		20
 #define PLAINTEXT_LENGTH	125
 #define SALT_SIZE		sizeof(struct custom_salt)
-#define BINARY_ALIGN		sizeof(ARCH_WORD_32)
+#define BINARY_ALIGN		sizeof(uint32_t)
 #define SALT_ALIGN			sizeof(int)
 #ifdef SIMD_COEF_32
 #define MIN_KEYS_PER_CRYPT  SSE_GROUP_SZ_SHA1
@@ -75,7 +75,7 @@ static struct fmt_tests odf_tests[] = {
 static int omp_t = 1;
 #endif
 static char (*saved_key)[PLAINTEXT_LENGTH + 1];
-static ARCH_WORD_32 (*crypt_out)[32 / sizeof(ARCH_WORD_32)];
+static uint32_t (*crypt_out)[32 / sizeof(uint32_t)];
 
 static struct custom_salt {
 	int cipher_type;
@@ -287,7 +287,7 @@ static int crypt_all(int *pcount, struct db_salt *salt)
 		int lens[MAX_KEYS_PER_CRYPT];
 		unsigned char *pin[MAX_KEYS_PER_CRYPT], *pout[MAX_KEYS_PER_CRYPT];
 #endif
-		if(cur_salt->checksum_type == 0 && cur_salt->cipher_type == 0) {
+		if (cur_salt->checksum_type == 0 && cur_salt->cipher_type == 0) {
 			for (i = 0; i < MAX_KEYS_PER_CRYPT; ++i) {
 				SHA1_Init(&ctx);
 				SHA1_Update(&ctx, (unsigned char *)saved_key[index+i], strlen(saved_key[index+i]));
@@ -348,7 +348,7 @@ static int crypt_all(int *pcount, struct db_salt *salt)
 			for (i = 0; i < MAX_KEYS_PER_CRYPT; ++i) {
 				memcpy(iv, cur_salt->iv, 16);
 				memset(&akey, 0, sizeof(AES_KEY));
-				if(AES_set_decrypt_key(key[i], 256, &akey) < 0) {
+				if (AES_set_decrypt_key(key[i], 256, &akey) < 0) {
 					fprintf(stderr, "AES_set_decrypt_key failed!\n");
 				}
 				AES_cbc_encrypt(cur_salt->content, output, cur_salt->content_length, &akey, iv, AES_DECRYPT);
@@ -421,7 +421,7 @@ struct fmt_main fmt_odf = {
 		SALT_ALIGN,
 		MIN_KEYS_PER_CRYPT,
 		MAX_KEYS_PER_CRYPT,
-		FMT_CASE | FMT_8_BIT | FMT_OMP,
+		FMT_CASE | FMT_8_BIT | FMT_OMP | FMT_HUGE_INPUT,
 		{
 			"iteration count",
 		},
@@ -441,7 +441,7 @@ struct fmt_main fmt_odf = {
 		},
 		fmt_default_source,
 		{
-			fmt_default_binary_hash /* Not usable with $SOURCE_HASH$ */
+			fmt_default_binary_hash
 		},
 		fmt_default_salt_hash,
 		NULL,
@@ -451,7 +451,7 @@ struct fmt_main fmt_odf = {
 		fmt_default_clear_keys,
 		crypt_all,
 		{
-			fmt_default_get_hash /* Not usable with $SOURCE_HASH$ */
+			fmt_default_get_hash
 		},
 		cmp_all,
 		cmp_one,

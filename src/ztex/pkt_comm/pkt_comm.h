@@ -1,15 +1,19 @@
-#include <stdint.h>
-
-// ***************************************************************
-//
-// Communication to a remote system
-//
-// * communication goes in sequential packets
-// * API is independent from hardware and link layer
-//
-// ***************************************************************
-
+/*
+ * Some generic communication to a remote device
+ *
+ * - communication goes in sequential packets
+ * - API is independent from hardware and link layer
+ *
+ * This software is Copyright (c) 2016 Denis Burykin
+ * [denis_burykin yahoo com], [denis-burykin2014 yandex ru]
+ * and it is hereby released to the general public under the following terms:
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted.
+ *
+ */
 #ifndef _PKT_COMM_H_
+
+#include <stdint.h>
 
 // *****************************************************************
 //
@@ -78,7 +82,7 @@ int get_pkt_count(void);
 
 
 // *****************************************************************
-// 
+//
 // packet queue
 //
 // *****************************************************************
@@ -130,7 +134,7 @@ struct pkt_comm_params {
 
 struct pkt_comm {
 	struct pkt_comm_params *params;
-	
+
 	struct pkt_queue *output_queue;
 	unsigned char *output_buf;
 	int output_buf_size;

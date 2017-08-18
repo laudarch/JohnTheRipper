@@ -15,6 +15,8 @@
 #ifndef _COMMON_OPENCL_H
 #define _COMMON_OPENCL_H
 
+#include <stdint.h>
+
 #ifdef __APPLE__
 #include <OpenCL/opencl.h>
 #include <OpenCL/cl_ext.h>
@@ -30,7 +32,6 @@
 #include "common.h"
 #include "formats.h"
 #include "path.h"
-#include "stdint.h"
 #include "opencl_device_info.h"
 
 #define MAX_PLATFORMS   8
@@ -100,7 +101,7 @@ typedef union {
 #endif
 
 #ifdef DEBUG_CL_ALLOC
-static inline cl_mem
+inline static cl_mem
 john_clCreateBuffer(int l, char *f, cl_context context, cl_mem_flags flags,
                     size_t size, void *host_ptr, cl_int *errcode_ret)
 {
@@ -122,6 +123,7 @@ typedef struct {
 extern int platform_id;
 extern int default_gpu_selected;
 extern int ocl_autotune_running;
+extern int volatile bench_running;
 extern size_t ocl_max_lws;
 
 extern cl_device_id devices[MAX_GPU_DEVICES];
@@ -236,7 +238,7 @@ void opencl_process_event(void);
 			        get_error_name(__err), __FILE__, __LINE__, message); \
 			else if (options.verbosity > VERB_LEGACY) \
 				fprintf(stderr, " %s\n", get_error_name(__err)); \
-			if (!ocl_autotune_running) \
+			if (!(ocl_autotune_running || bench_running)) \
 				error(); \
 			else \
 				return -1; \

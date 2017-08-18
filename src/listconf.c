@@ -19,19 +19,19 @@
 #include "os.h"
 
 #if !AC_BUILT
-# include <string.h>
-# ifndef _MSC_VER
-#  include <strings.h>
-# endif
+ #include <string.h>
+ #ifndef _MSC_VER
+  #include <strings.h>
+ #endif
 #else
-# if STRING_WITH_STRINGS
-#  include <string.h>
-#  include <strings.h>
-# elif HAVE_STRING_H
-#  include <string.h>
-# elif HAVE_STRINGS_H
-#  include <strings.h>
-# endif
+ #if STRING_WITH_STRINGS
+  #include <string.h>
+  #include <strings.h>
+ #elif HAVE_STRING_H
+  #include <string.h>
+ #elif HAVE_STRINGS_H
+  #include <strings.h>
+ #endif
 #endif
 #include <openssl/crypto.h>
 
@@ -67,10 +67,6 @@
 #include "john_build_rule.h"
 #endif
 
-#if HAVE_CUDA
-extern char *get_cuda_header_version();
-extern void cuda_device_list();
-#endif
 #if HAVE_OPENCL
 #include "common-opencl.h"
 #endif
@@ -88,14 +84,11 @@ static void listconf_list_options()
 	puts("help[:WHAT], subformats, inc-modes, rules, externals, ext-modes, ext-hybrids,");
 	puts("ext-filters, ext-filters-only, build-info, hidden-options, encodings,");
 	puts("formats, format-details, format-all-details, format-methods[:WHICH],");
-	// With "opencl-devices, cuda-devices, <conf section name>" added,
+	// With "opencl-devices, <conf section name>" added,
 	// the resulting line will get too long
 	puts("format-tests, sections, parameters:SECTION, list-data:SECTION,");
 #if HAVE_OPENCL
 	printf("opencl-devices, ");
-#endif
-#if HAVE_CUDA
-	printf("cuda-devices, ");
 #endif
 	/* NOTE: The following must end the list. Anything listed after
 	   <conf section name> will be ignored by current
@@ -193,9 +186,6 @@ static void listconf_list_build_info(void)
 #endif
 #endif
 
-#if HAVE_CUDA
-	printf("CUDA headers version: %s\n",get_cuda_header_version());
-#endif
 #if HAVE_OPENCL
 	printf("OpenCL headers version: %s\n",get_opencl_header_version());
 #endif
@@ -334,13 +324,6 @@ void listconf_parse_early(void)
 		listEncodings(stdout);
 		exit(EXIT_SUCCESS);
 	}
-#if HAVE_CUDA
-	if (!strcasecmp(options.listconf, "cuda-devices"))
-	{
-		cuda_device_list();
-		exit(EXIT_SUCCESS);
-	}
-#endif
 }
 
 /*
@@ -353,7 +336,7 @@ void list_tunable_cost_names(struct fmt_main *format, char *separator)
 	int i;
 
 	for (i = 0; i < FMT_TUNABLE_COSTS; ++i) {
-		if(format->params.tunable_cost_name[i]) {
+		if (format->params.tunable_cost_name[i]) {
 			if (i)
 				printf("%s", separator);
 			printf("%s", format->params.tunable_cost_name[i]);
@@ -415,7 +398,6 @@ void listconf_parse_late(void)
 #if HAVE_OPENCL
 	if (!strcasecmp(options.listconf, "opencl-devices"))
 	{
-		opencl_preinit();
 		opencl_list_devices();
 		exit(EXIT_SUCCESS);
 	}
@@ -597,10 +579,15 @@ void listconf_parse_late(void)
 		format = fmt_list;
 		do {
 			int ntests = 0;
+			int enc_len, utf8_len;
 
 /* Some encodings change max plaintext length when encoding is used,
    or KPC when under OMP */
 			fmt_init(format);
+
+			utf8_len = enc_len = format->params.plaintext_length;
+			if (options.target_enc == UTF_8)
+				utf8_len /= 3;
 
 			if (format->params.tests) {
 				while (format->params.tests[ntests++].ciphertext);
@@ -620,15 +607,32 @@ void listconf_parse_late(void)
 			                    SUBSECTION_FORMATS,
 			                    format->params.label, 0)
 			       ? "yes" : "no");
-			printf("Min. password length in bytes        %d\n", format->params.plaintext_min_length);
-			printf("Max. password length in bytes        %d\n", format->params.plaintext_length);
+			printf("Min. password length                 %d\n", format->params.plaintext_min_length);
+			if (!(format->params.flags & FMT_8_BIT) ||
+			    options.target_enc != UTF_8 ||
+			    !strncasecmp(format->params.label, "LM", 2) ||
+			    !strcasecmp(format->params.label, "netlm") ||
+			    !strcasecmp(format->params.label, "nethalflm") ||
+			    !strcasecmp(format->params.label, "sapb")) {
+				/* Not using UTF-8 so length is not ambiguous */
+				printf("Max. password length                 %d\n", enc_len);
+			} else if (!fmt_raw_len || fmt_raw_len == enc_len) {
+				/* Example: Office and thin dynamics */
+				printf("Max. password length                 %d [worst case UTF-8] to %d [ASCII]\n", utf8_len, enc_len);
+			} else if (enc_len == 3 * fmt_raw_len) {
+				/* Example: NT */
+				printf("Max. password length                 %d\n", utf8_len);
+			} else {
+				/* Example: SybaseASE */
+				printf("Max. password length                 %d [worst case UTF-8] to %d [ASCII]\n", utf8_len, fmt_raw_len);
+			}
 			printf("Min. keys per crypt                  %d\n", format->params.min_keys_per_crypt);
 			printf("Max. keys per crypt                  %d\n", format->params.max_keys_per_crypt);
 			printf("Flags\n");
 			printf(" Case sensitive                      %s\n", (format->params.flags & FMT_CASE) ? "yes" : "no");
 			printf(" Truncates at (our) max. length      %s\n", (format->params.flags & FMT_TRUNC) ? "yes" : "no");
 			printf(" Supports 8-bit characters           %s\n", (format->params.flags & FMT_8_BIT) ? "yes" : "no");
-			printf(" Converts 8859-1 to UTF-16/UCS-2     %s\n", (format->params.flags & FMT_UNICODE) ? "yes" : "no");
+			printf(" Converts internally to UTF-16/UCS-2 %s\n", (format->params.flags & FMT_UNICODE) ? "yes" : "no");
 			printf(" Honours --encoding=NAME             %s\n",
 			       (format->params.flags & FMT_UTF8) ? "yes" :
 			       (format->params.flags & FMT_UNICODE) ? "no" : "n/a");
@@ -636,6 +640,7 @@ void listconf_parse_late(void)
 			       (format->params.flags & FMT_NOT_EXACT) ? "yes" : "no");
 			printf(" Uses a bitslice implementation      %s\n", (format->params.flags & FMT_BS) ? "yes" : "no");
 			printf(" The split() method unifies case     %s\n", (format->params.flags & FMT_SPLIT_UNIFIES_CASE) ? "yes" : "no");
+			printf(" Supports very long hashes           %s\n", (format->params.flags & FMT_HUGE_INPUT) ? "yes" : "no");
 
 #ifndef DYNAMIC_DISABLED
 			if (format->params.flags & FMT_DYNAMIC) {

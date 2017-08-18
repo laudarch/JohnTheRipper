@@ -75,7 +75,7 @@ john_register_one(&fmt_AzureAD);
 static char (*saved_key)[PLAINTEXT_LENGTH + 1];
 static char (*saved_nt)[64];
 static int dirty;
-static ARCH_WORD_32 (*crypt_out)[BINARY_SIZE / sizeof(ARCH_WORD_32)];
+static uint32_t (*crypt_out)[BINARY_SIZE / sizeof(uint32_t)];
 
 static void init(struct fmt_main *self)
 {
@@ -163,7 +163,7 @@ static int crypt_all(int *pcount, struct db_salt *salt) {
 		int lens[MAX_KEYS_PER_CRYPT];
 		unsigned char *pin[MAX_KEYS_PER_CRYPT];
 		union {
-			ARCH_WORD_32 *pout[MAX_KEYS_PER_CRYPT];
+			uint32_t *pout[MAX_KEYS_PER_CRYPT];
 			unsigned char *poutc;
 		} x;
 		cnt = MAX_KEYS_PER_CRYPT;
@@ -171,7 +171,7 @@ static int crypt_all(int *pcount, struct db_salt *salt) {
 		cnt = 1;
 #endif
 		if (dirty)
-		for(i = 0; i < cnt; ++i) {
+		for (i = 0; i < cnt; ++i) {
 			len = enc_to_utf16(Buf, PLAINTEXT_LENGTH, (UTF8*)saved_key[index+i], strlen(saved_key[index+i]));
 			if (len < 0) len = 0;
 			MD4_Init(&ctx);

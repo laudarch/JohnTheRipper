@@ -113,12 +113,12 @@ static struct fmt_tests aixssha_tests512[] = {
 };
 
 static char (*saved_key)[PLAINTEXT_LENGTH + 1];
-static ARCH_WORD_32 (*crypt_out)[BINARY_SIZE / sizeof(ARCH_WORD_32)];
+static uint32_t (*crypt_out)[BINARY_SIZE / sizeof(uint32_t)];
 
 static struct custom_salt {
 	int iterations;
 	int type;
-	char unsigned salt[MAX_SALT_SIZE + 1];
+	unsigned char salt[MAX_SALT_SIZE + 1];
 } *cur_salt;
 
 static void init(struct fmt_main *self)
@@ -140,7 +140,7 @@ static void done(void)
 	MEM_FREE(crypt_out);
 	MEM_FREE(saved_key);
 }
-static int inline valid_common(char *ciphertext, struct fmt_main *self, int b64len, char *sig, int siglen)
+static inline int valid_common(char *ciphertext, struct fmt_main *self, int b64len, char *sig, int siglen)
 {
 	char *p = ciphertext;
 	int len;
@@ -212,10 +212,10 @@ static void *get_salt(char *ciphertext)
 }
 
 #define TO_BINARY(b1, b2, b3) {	  \
-	value = (ARCH_WORD_32)atoi64[ARCH_INDEX(pos[0])] | \
-		((ARCH_WORD_32)atoi64[ARCH_INDEX(pos[1])] << 6) | \
-		((ARCH_WORD_32)atoi64[ARCH_INDEX(pos[2])] << 12) | \
-		((ARCH_WORD_32)atoi64[ARCH_INDEX(pos[3])] << 18); \
+	value = (uint32_t)atoi64[ARCH_INDEX(pos[0])] | \
+		((uint32_t)atoi64[ARCH_INDEX(pos[1])] << 6) | \
+		((uint32_t)atoi64[ARCH_INDEX(pos[2])] << 12) | \
+		((uint32_t)atoi64[ARCH_INDEX(pos[3])] << 18); \
 	pos += 4; \
 	out.c[b1] = value >> 16; \
 	out.c[b2] = value >> 8; \
@@ -225,9 +225,9 @@ static void *get_binary(char *ciphertext)
 {
 	static union {
 		unsigned char c[LARGEST_BINARY_SIZE+3];
-		ARCH_WORD_64 dummy;
+		uint64_t dummy;
 	} out;
-	ARCH_WORD_32 value;
+	uint32_t value;
 	char *pos = strrchr(ciphertext, '$') + 1;
 	int len = strlen(pos);
 	int i;
@@ -237,13 +237,13 @@ static void *get_binary(char *ciphertext)
 		TO_BINARY(i, i + 1, i + 2);
 
 	if (len % 3 == 1) {
-		value = (ARCH_WORD_32)atoi64[ARCH_INDEX(pos[0])] |
-			((ARCH_WORD_32)atoi64[ARCH_INDEX(pos[1])] << 6);
+		value = (uint32_t)atoi64[ARCH_INDEX(pos[0])] |
+			((uint32_t)atoi64[ARCH_INDEX(pos[1])] << 6);
 		out.c[i] = value;
 	} else if (len % 3 == 2) { /* sha-1, sha-256 */
-		value = (ARCH_WORD_32)atoi64[ARCH_INDEX(pos[0])] |
-			((ARCH_WORD_32)atoi64[ARCH_INDEX(pos[1])] << 6) |
-			((ARCH_WORD_32)atoi64[ARCH_INDEX(pos[2])] << 12);
+		value = (uint32_t)atoi64[ARCH_INDEX(pos[0])] |
+			((uint32_t)atoi64[ARCH_INDEX(pos[1])] << 6) |
+			((uint32_t)atoi64[ARCH_INDEX(pos[2])] << 12);
 		out.c[i++] = value >> 8;
 		out.c[i++] = value;
 	}
@@ -298,7 +298,7 @@ static int crypt_all(int *pcount, struct db_salt *salt)
 				int lens[SSE_GROUP_SZ_SHA1], i;
 				unsigned char *pin[SSE_GROUP_SZ_SHA1];
 				union {
-					ARCH_WORD_32 *pout[SSE_GROUP_SZ_SHA1];
+					uint32_t *pout[SSE_GROUP_SZ_SHA1];
 					unsigned char *poutc;
 				} x;
 				for (i = 0; i < SSE_GROUP_SZ_SHA1; ++i) {
@@ -320,7 +320,7 @@ static int crypt_all(int *pcount, struct db_salt *salt)
 				int lens[SSE_GROUP_SZ_SHA256], i;
 				unsigned char *pin[SSE_GROUP_SZ_SHA256];
 				union {
-					ARCH_WORD_32 *pout[SSE_GROUP_SZ_SHA256];
+					uint32_t *pout[SSE_GROUP_SZ_SHA256];
 					unsigned char *poutc;
 				} x;
 				for (i = 0; i < SSE_GROUP_SZ_SHA256; ++i) {
@@ -342,7 +342,7 @@ static int crypt_all(int *pcount, struct db_salt *salt)
 				int lens[SSE_GROUP_SZ_SHA512], i;
 				unsigned char *pin[SSE_GROUP_SZ_SHA512];
 				union {
-					ARCH_WORD_32 *pout[SSE_GROUP_SZ_SHA512];
+					uint32_t *pout[SSE_GROUP_SZ_SHA512];
 					unsigned char *poutc;
 				} x;
 				for (i = 0; i < SSE_GROUP_SZ_SHA512; ++i) {

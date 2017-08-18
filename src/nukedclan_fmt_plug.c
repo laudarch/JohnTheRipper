@@ -59,7 +59,7 @@ john_register_one(&fmt_nk);
 #define CIPHERTEXT_LENGTH	(4+32+40+3+1)
 #define BINARY_SIZE		16
 #define SALT_SIZE		sizeof(struct custom_salt)
-#define BINARY_ALIGN		sizeof(ARCH_WORD_32)
+#define BINARY_ALIGN		sizeof(uint32_t)
 #define SALT_ALIGN			sizeof(int)
 #define MIN_KEYS_PER_CRYPT	1
 #define MAX_KEYS_PER_CRYPT	64
@@ -75,14 +75,14 @@ static struct fmt_tests nk_tests[] = {
 };
 
 static char (*saved_key)[PLAINTEXT_LENGTH + 1];
-static ARCH_WORD_32 (*crypt_out)[BINARY_SIZE / sizeof(ARCH_WORD_32)];
+static uint32_t (*crypt_out)[BINARY_SIZE / sizeof(uint32_t)];
 
 static struct custom_salt {
 	unsigned char HASHKEY[41];
 	int decal;
 } *cur_salt;
 
-static inline void hex_encode(unsigned char *str, int len, unsigned char *out)
+inline static void hex_encode(unsigned char *str, int len, unsigned char *out)
 {
 	int i;
 	for (i = 0; i < len; ++i) {
@@ -137,7 +137,7 @@ static int valid(char *ciphertext, struct fmt_main *self)
 	if (!(ptr = strtokm(ctcopy, "*")))
 		goto error;
 	/* HASHKEY is of fixed length 40 */
-	if(hexlenl(ptr, &extra) != 40 || extra)
+	if (hexlenl(ptr, &extra) != 40 || extra)
 		goto error;
 	if (!(ptr = strtokm(NULL, "*")))
 		goto error;
@@ -147,7 +147,7 @@ static int valid(char *ciphertext, struct fmt_main *self)
 		goto error;
 	ptr += 2;
 	/* hash is of fixed length 32 */
-	if(hexlenl(ptr, &extra) != 32 || extra)
+	if (hexlenl(ptr, &extra) != 32 || extra)
 		goto error;
 
 	MEM_FREE(keeptr);
@@ -228,7 +228,7 @@ static int crypt_all(int *pcount, struct db_salt *salt)
 		hex_encode(out, 20, pass);
 		for (i = 0, k=cur_salt->decal; i < 40; ++i, ++k) {
 			out[idx++] = pass[i];
-			if(k>19) k = 0;
+			if (k>19) k = 0;
 			out[idx++] = cur_salt->HASHKEY[k];
 		}
 		MD5_Init(&c);
@@ -242,14 +242,14 @@ static int cmp_all(void *binary, int count)
 {
 	int index = 0;
 	for (; index < count; index++)
-		if (*((ARCH_WORD_32*)binary) == crypt_out[index][0])
+		if (*((uint32_t*)binary) == crypt_out[index][0])
 			return 1;
 	return 0;
 }
 
 static int cmp_one(void *binary, int index)
 {
-	return *((ARCH_WORD_32*)binary) == crypt_out[index][0];
+	return *((uint32_t*)binary) == crypt_out[index][0];
 }
 
 static int cmp_exact(char *source, int index)

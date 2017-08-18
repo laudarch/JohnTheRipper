@@ -498,7 +498,7 @@ void do_incremental_crack(struct db_main *db, char *mode)
 		fprintf(stderr, "Proceeding with incremental:%s\n", mode);
 
 	if (!(charset = cfg_get_param(SECTION_INC, mode, "File"))) {
-		if(cfg_get_section(SECTION_INC, mode) == NULL) {
+		if (cfg_get_section(SECTION_INC, mode) == NULL) {
 			log_event("! Unknown incremental mode: %s", mode);
 			if (john_main_process)
 				fprintf(stderr, "Unknown incremental mode: %s\n",
@@ -544,10 +544,10 @@ void do_incremental_crack(struct db_main *db, char *mode)
 	}
 #endif
 
-	/* Command-line can over-ride lengths from config file */
-	if (options.req_minlength >= 0)
+	/* Command-line can override (narrow) lengths from config file */
+	if (options.req_minlength > min_length)
 		min_length = options.req_minlength;
-	if (options.req_maxlength)
+	if (options.req_maxlength && options.req_maxlength < max_length)
 		max_length = options.req_maxlength;
 
 	if (min_length > max_length) {

@@ -103,7 +103,7 @@ static struct {
 	char *classes[0x100];
 } CC_CACHE_ALIGN rules_data;
 
-/* A null string that is safe to read past (for eg. ASan) */
+/* A null string that is safe to read past (e.g. for ASan) */
 static char safe_null_string[RULE_BUFFER_SIZE];
 
 #define rules_pass rules_data.pass
@@ -351,7 +351,7 @@ static void rules_init_classes(void)
 	memset(rules_classes, 0, sizeof(rules_classes));
 
 	// this is an ugly hack but it works fine, used for 'b' below
-	for(i=0;i<128;i++)
+	for (i=0;i<128;i++)
 		eightbitchars[i] = i+128;
 	eightbitchars[128] = 0;
 
@@ -360,7 +360,7 @@ static void rules_init_classes(void)
 	rules_init_class('Z', "");
 
 	// Load user-defined character classes ?0 .. ?9 from john.conf
-	for(i='0'; i <= '9'; i++) {
+	for (i='0'; i <= '9'; i++) {
 		char user_class_num[] = "0";
 		char *user_class;
 		user_class_num[0] = i;
@@ -1260,7 +1260,8 @@ char *rules_apply(char *word_in, char *rule, int split, char *last)
 	int length;
 	int which;
 
-	if (options.internal_cp != UTF_8 && options.target_enc == UTF_8)
+	if (!(options.flags & FLG_SINGLE_CHK) &&
+	    options.internal_cp != UTF_8 && options.target_enc == UTF_8)
 		memory = word = utf8_to_cp_r(word_in, cpword,
 		                             PLAINTEXT_BUFFER_SIZE);
 	else
@@ -2162,7 +2163,7 @@ char *rules_apply(char *word_in, char *rule, int split, char *last)
 				int up=1;
 				CLASS(0,
 				      up=1,
-				      if(up) in[pos] = conv_toupper[ARCH_INDEX(in[pos])];
+				      if (up) in[pos] = conv_toupper[ARCH_INDEX(in[pos])];
 				      else   in[pos] = conv_tolower[ARCH_INDEX(in[pos])];
 				      up=0)
 			}

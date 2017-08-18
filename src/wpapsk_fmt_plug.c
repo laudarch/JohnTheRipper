@@ -7,9 +7,9 @@
  * Code is based on  Aircrack-ng source
  *
  * SSE2 code enhancement, Jim Fougeron, Jan, 2013.
- *   Also removed oSSL code: HMAC(EVP_sha1(), ....), and coded what it does
- * (which is simple), inline.
+ *  Also removed oSSL EVP code and coded what it does (which is simple), inline.
  */
+
 #if FMT_EXTERNS_H
 extern struct fmt_main fmt_wpapsk;
 #elif FMT_REGISTERS_H
@@ -17,10 +17,10 @@ john_register_one(&fmt_wpapsk);
 #else
 
 #include <string.h>
+#include <assert.h>
+
 #include "arch.h"
 #include "simd-intrinsics.h"
-
-#include <assert.h>
 #include "formats.h"
 #include "common.h"
 #include "misc.h"
@@ -33,15 +33,15 @@ john_register_one(&fmt_wpapsk);
 //#undef SIMD_COEF_32
 
 #ifdef SIMD_COEF_32
-#  define NBKEYS	(SIMD_COEF_32 * SIMD_PARA_SHA1)
-#  ifdef _OPENMP
-#    include <omp.h>
-#  endif
+  #define NBKEYS	(SIMD_COEF_32 * SIMD_PARA_SHA1)
+  #ifdef _OPENMP
+    #include <omp.h>
+  #endif
 #else
-#  define NBKEYS	1
-#  ifdef _OPENMP
-#    include <omp.h>
-#  endif
+  #define NBKEYS	1
+  #ifdef _OPENMP
+    #include <omp.h>
+  #endif
 #endif
 
 #include "memdbg.h"
@@ -176,9 +176,6 @@ static MAYBE_INLINE void wpapsk_cpu(int count,
 		SHA1_Update(&ctx_opad, buffer.c, 64);
 
 		essid[slen - 1] = 1;
-//		HMAC(EVP_sha1(), in[j].v, in[j].length, essid, slen, outbuf.c, NULL);
-		// This code does the HMAC(EVP_....) call.  NOTE, we already have essid
-		// appended with BE((int)1) so we simply call a single SHA1_Update
 		memcpy(&sha1_ctx, &ctx_ipad, sizeof(sha1_ctx));
 		SHA1_Update(&sha1_ctx, essid, slen);
 		SHA1_Final(outbuf.c, &sha1_ctx);
@@ -198,9 +195,6 @@ static MAYBE_INLINE void wpapsk_cpu(int count,
 		}
 		essid[slen - 1] = 2;
 
-//		HMAC(EVP_sha1(), in[j].v, in[j].length, essid, slen, &outbuf.c[20], NULL);
-		// This code does the HMAC(EVP_....) call.  NOTE, we already have essid
-		// appended with BE((int)1) so we simply call a single SHA1_Update
 		memcpy(&sha1_ctx, &ctx_ipad, sizeof(sha1_ctx));
 		SHA1_Update(&sha1_ctx, essid, slen);
 		SHA1_Final(&outbuf.c[20], &sha1_ctx);
@@ -292,9 +286,6 @@ static MAYBE_INLINE void wpapsk_sse(int count, wpapsk_password * in, wpapsk_hash
 			i2[(j/SIMD_COEF_32)*SIMD_COEF_32*5+(j&(SIMD_COEF_32-1))+4*SIMD_COEF_32] = ctx_opad[j].h4;
 
 			essid[slen - 1] = 1;
-//			HMAC(EVP_sha1(), in[j].v, in[j].length, essid, slen, outbuf.c, NULL);
-			// This code does the HMAC(EVP_....) call.  NOTE, we already have essid
-			// appended with BE((int)1) so we simply call a single SHA1_Update
 			memcpy(&sha1_ctx, &ctx_ipad[j], sizeof(sha1_ctx));
 			SHA1_Update(&sha1_ctx, essid, slen);
 			SHA1_Final(outbuf[j].c, &sha1_ctx);
@@ -318,16 +309,13 @@ static MAYBE_INLINE void wpapsk_sse(int count, wpapsk_password * in, wpapsk_hash
 			SIMDSHA1body((unsigned int*)t_sse_hash1, (unsigned int*)t_sse_hash1, (unsigned int*)t_sse_crypt2, SSEi_MIXED_IN|SSEi_RELOAD|SSEi_OUTPUT_AS_INP_FMT);
 			for (j = 0; j < NBKEYS; j++) {
 				unsigned *p = &((unsigned int*)t_sse_hash1)[(((j/SIMD_COEF_32)*SHA_BUF_SIZ)*SIMD_COEF_32) + (j&(SIMD_COEF_32-1))];
-				for(k = 0; k < 5; k++)
+				for (k = 0; k < 5; k++)
 					outbuf[j].i[k] ^= p[(k*SIMD_COEF_32)];
 			}
 		}
 		essid[slen - 1] = 2;
 
 		for (j = 0; j < NBKEYS; ++j) {
-//			HMAC(EVP_sha1(), in[j].v, in[j].length, essid, slen, &outbuf.c[20], NULL);
-			// This code does the HMAC(EVP_....) call.  NOTE, we already have essid
-			// appended with BE((int)1) so we simply call a single SHA1_Update
 			memcpy(&sha1_ctx, &ctx_ipad[j], sizeof(sha1_ctx));
 			SHA1_Update(&sha1_ctx, essid, slen);
 			SHA1_Final(&outbuf[j].c[20], &sha1_ctx);
@@ -350,14 +338,14 @@ static MAYBE_INLINE void wpapsk_sse(int count, wpapsk_password * in, wpapsk_hash
 			SIMDSHA1body((unsigned int*)t_sse_hash1, (unsigned int*)t_sse_hash1, (unsigned int*)t_sse_crypt2, SSEi_MIXED_IN|SSEi_RELOAD|SSEi_OUTPUT_AS_INP_FMT);
 			for (j = 0; j < NBKEYS; j++) {
 				unsigned *p = &((unsigned int*)t_sse_hash1)[(((j/SIMD_COEF_32)*SHA_BUF_SIZ)*SIMD_COEF_32) + (j&(SIMD_COEF_32-1))];
-				for(k = 5; k < 8; k++)
+				for (k = 5; k < 8; k++)
 					outbuf[j].i[k] ^= p[((k-5)*SIMD_COEF_32)];
 			}
 		}
 
 		for (j = 0; j < NBKEYS; ++j) {
 			// the BE() convert should be done in binary, BUT since we use 'common' code for
-			// get_binary(), which is shared between CPU and CUDA/OPenCL, we have to do it here.
+			// get_binary(), which is shared between CPU and OpenCL, we have to do it here.
 			memcpy(out[t*NBKEYS+j].v, outbuf[j].c, 32);
 			alter_endianity_to_BE(out[t*NBKEYS+j].v,8);
 		}
@@ -368,8 +356,9 @@ static MAYBE_INLINE void wpapsk_sse(int count, wpapsk_password * in, wpapsk_hash
 static int crypt_all(int *pcount, struct db_salt *salt)
 {
 	const int count = *pcount;
+	extern volatile int bench_running;
 
-	if (new_keys || strcmp(last_ssid, hccap.essid)) {
+	if (new_keys || strcmp(last_ssid, hccap.essid) || bench_running) {
 #ifndef SIMD_COEF_32
 		wpapsk_cpu(count, inbuffer, outbuffer, &currentsalt);
 #else
@@ -400,7 +389,9 @@ struct fmt_main fmt_wpapsk = {
 		MIN_KEYS_PER_CRYPT,
 		MAX_KEYS_PER_CRYPT,
 		FMT_CASE | FMT_OMP,
-		{ NULL },
+		{
+			"Key version"
+		},
 		{ FORMAT_TAG },
 		tests
 	},
@@ -413,7 +404,9 @@ struct fmt_main fmt_wpapsk = {
 		fmt_default_split,
 		get_binary,
 		get_salt,
-		{ NULL },
+		{
+			get_keyver,
+		},
 		fmt_default_source,
 		{
 			binary_hash_0,

@@ -61,7 +61,7 @@
 #endif
 #include "path.h"
 #include "jumbo.h"
-#if HAVE_LIBDL && defined(HAVE_CUDA) || defined(HAVE_OPENCL)
+#if HAVE_LIBDL && defined(HAVE_OPENCL)
 #include "common-gpu.h"
 #endif
 #include "memdbg.h"
@@ -162,7 +162,7 @@ void crk_init(struct db_main *db, void (*fix_state)(void),
 		error();
 	}
 
-#if defined(HAVE_OPENCL) || defined(HAVE_CUDA)
+#if defined(HAVE_OPENCL)
 	/* This erases the 'spinning wheel' cursor from self-test */
 	if (john_main_process)
 		fprintf(stderr, " \b");
@@ -375,7 +375,7 @@ static int crk_process_guess(struct db_salt *salt, struct db_password *pw,
 		}
 		if (options.report_utf8) {
 			repkey = utf8key;
-			if (options.target_enc != UTF_8)
+			if (options.internal_cp != UTF_8)
 				replogin = cp_to_utf8_r(replogin,
 					      utf8login, PLAINTEXT_BUFFER_SIZE);
 		}
@@ -399,6 +399,12 @@ static int crk_process_guess(struct db_salt *salt, struct db_password *pw,
 			timer_abort = status_get_time() - options.max_run_time;
 #endif
 		}
+
+		if (options.max_cands < 0)
+			john_max_cands =
+				((unsigned long long)status.cands.hi << 32) +
+				status.cands.lo - options.max_cands +
+				crk_params.max_keys_per_crypt;
 
 		if (dupe)
 			ct = NULL;
@@ -594,10 +600,32 @@ int crk_reload_pot(void)
 	if (!(pot_file = fopen(path_expand(options.activepot), "rb")))
 		pexit("fopen: %s", path_expand(options.activepot));
 
-	if (crk_pot_pos && (jtr_fseek64(pot_file, crk_pot_pos, SEEK_SET) == -1)) {
-		perror("fseek");
-		rewind(pot_file);
-		crk_pot_pos = 0;
+	if (crk_pot_pos) {
+		if (jtr_fseek64(pot_file, 0, SEEK_END) == -1)
+			pexit("fseek to end of pot file");
+		if (crk_pot_pos == jtr_ftell64(pot_file)) {
+			if (fclose(pot_file))
+				pexit("fclose");
+			return 0;
+		}
+		if (crk_pot_pos > jtr_ftell64(pot_file)) {
+			if (john_main_process) {
+				fprintf(stderr,
+				        "Note: pot file shrunk. Recovering.\n");
+			}
+			log_event("Note: pot file shrunk. Recovering.");
+			rewind(pot_file);
+			crk_pot_pos = 0;
+		}
+		if (jtr_fseek64(pot_file, crk_pot_pos, SEEK_SET) == -1) {
+			perror("fseek to sync pos. of pot file");
+			log_event("fseek to sync pos. of pot file: %s",
+			          strerror(errno));
+			crk_pot_pos = 0;
+			if (fclose(pot_file))
+				pexit("fclose");
+			return 0;
+		}
 	}
 
 	ldr_in_pot = 1; /* Mutes some warnings from valid() et al */
@@ -610,6 +638,7 @@ int crk_reload_pot(void)
 			continue;
 		*p = 0;
 
+		fields[0] = "";
 		fields[1] = ciphertext;
 		ciphertext = crk_methods.prepare(fields, crk_db->format);
 		if (ldr_trunc_valid(ciphertext, crk_db->format)) {
@@ -751,7 +780,7 @@ static int crk_process_event(void)
 
 	if (event_poll_files) {
 		event_poll_files = 0;
-#if HAVE_LIBDL && defined(HAVE_CUDA) || defined(HAVE_OPENCL)
+#if HAVE_LIBDL && defined(HAVE_OPENCL)
 		gpu_check_temp();
 #endif
 		crk_poll_files();
@@ -950,12 +979,13 @@ static int crk_salt_loop(void)
 	}
 	do {
 		crk_methods.set_salt(salt->salt);
-		status.resume_salt_md5 = salt->salt_md5;
+		status.resume_salt_md5 = (crk_db->salt_count > 1) ?
+			salt->salt_md5 : NULL;
 		if ((done = crk_password_loop(salt)))
 			break;
 	} while ((salt = salt->next));
-	if (!salt || salt->count < 2)
-		status.resume_salt_md5 = 0;
+	if (!salt || crk_db->salt_count < 2)
+		status.resume_salt_md5 = NULL;
 
 	if (done >= 0) {
 #if !HAVE_OPENCL
@@ -968,6 +998,14 @@ static int crk_salt_loop(void)
 		mul32by32(&totcand, crk_key_index, mask_int_cand.num_int_cand);
 		add64to64(&status.cands, &totcand);
 #endif
+	}
+
+	if (john_max_cands && !event_abort) {
+		unsigned long long cands =
+			((unsigned long long)
+			 status.cands.hi << 32) + status.cands.lo;
+		if (cands >= john_max_cands)
+			event_abort = event_pending = 1;
 	}
 
 	if (salt)
@@ -1020,6 +1058,14 @@ int crk_process_key(char *key)
 		puts(crk_stdout_key);
 
 	status_update_cands(1);
+
+	if (john_max_cands && !event_abort) {
+		unsigned long long cands =
+			((unsigned long long)
+			 status.cands.hi << 32) + status.cands.lo;
+		if (cands >= john_max_cands)
+			event_abort = event_pending = 1;
+	}
 
 	if (options.flags & FLG_MASK_STACKED)
 		mask_fix_state();
@@ -1092,6 +1138,7 @@ int crk_process_salt(struct db_salt *salt)
 			if (!salt->list)
 				return 0;
 			index = 0;
+			crk_methods.clear_keys();
 		}
 	}
 

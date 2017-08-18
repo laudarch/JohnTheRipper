@@ -4,7 +4,7 @@
  * to the general public under the following terms:  Redistribution and use in
  * source and binary forms, with or without modification, are permitted.
  *
- * The internals of this algorithm were found on the HashCat forum, and
+ * The internals of this algorithm were found on the hashcat forum, and
  * implemented here, whether, it is right or wrong. A link to that post is:
  * http://hashcat.net/forum/thread-3804.html
  * There are some things which are unclear, BUT which have been coded as listed
@@ -122,11 +122,11 @@ john_register_one(&fmt_sapH);
 #ifdef SIMD_COEF_32
 #define MIN_KEYS_PER_CRYPT		NBKEYS
 #define MAX_KEYS_PER_CRYPT		NBKEYS
-#define PLAINTEXT_LENGTH        23
+#define PLAINTEXT_LENGTH        23 /* Real world max. is 40 */
 #else
 #define MIN_KEYS_PER_CRYPT		1
 #define MAX_KEYS_PER_CRYPT		1
-#define PLAINTEXT_LENGTH        125
+#define PLAINTEXT_LENGTH        40
 #endif
 
 static struct fmt_tests tests[] = {
@@ -153,7 +153,7 @@ static struct fmt_tests tests[] = {
 };
 
 static char (*saved_plain)[PLAINTEXT_LENGTH + 1];
-static ARCH_WORD_32 (*crypt_key)[BINARY_SIZE/sizeof(ARCH_WORD_32)];
+static uint32_t (*crypt_key)[BINARY_SIZE/sizeof(uint32_t)];
 
 static struct sapH_salt {
 	int slen;	/* actual length of salt ( 1 to 16 bytes) */
@@ -244,7 +244,7 @@ static char *get_key(int index)
 static int cmp_all(void *binary, int count) {
 	int index;
 	for (index = 0; index < count; index++)
-		if (*(ARCH_WORD_32*)binary == *(ARCH_WORD_32*)crypt_key[index])
+		if (*(uint32_t*)binary == *(uint32_t*)crypt_key[index])
 			return 1;
 	return 0;
 }
@@ -431,12 +431,12 @@ static void crypt_all_384(int count) {
 		memcpy(crypt_key[idx], cp, BINARY_SIZE);
 #else
 		unsigned char _IBuf[128*NBKEYS512+MEM_ALIGN_SIMD], *keys, tmpBuf[64], _OBuf[64*NBKEYS512+MEM_ALIGN_SIMD], *crypt;
-		ARCH_WORD_64 j, *crypt64, offs[NBKEYS512];
+		uint64_t j, *crypt64, offs[NBKEYS512];
 		uint32_t len;
 
 		keys  = (unsigned char*)mem_align(_IBuf, MEM_ALIGN_SIMD);
 		crypt = (unsigned char*)mem_align(_OBuf, MEM_ALIGN_SIMD);
-		crypt64 = (ARCH_WORD_64*)crypt;
+		crypt64 = (uint64_t*)crypt;
 		memset(keys, 0, 128*NBKEYS512);
 
 		for (i = 0; i < NBKEYS512; ++i) {
@@ -457,8 +457,8 @@ static void crypt_all_384(int count) {
 			uint32_t k;
 			SIMDSHA512body(keys, crypt64, NULL, SSEi_FLAT_IN|SSEi_CRYPT_SHA384);
 			for (k = 0; k < NBKEYS512; ++k) {
-				ARCH_WORD_64 *pcrypt = &crypt64[ ((k/SIMD_COEF_64)*(SIMD_COEF_64*8)) + (k&(SIMD_COEF_64-1))];
-				ARCH_WORD_64 *Icp64 = (ARCH_WORD_64 *)(&keys[(k<<7)+offs[k]]);
+				uint64_t *pcrypt = &crypt64[ ((k/SIMD_COEF_64)*(SIMD_COEF_64*8)) + (k&(SIMD_COEF_64-1))];
+				uint64_t *Icp64 = (uint64_t *)(&keys[(k<<7)+offs[k]]);
 				for (j = 0; j < 6; ++j) {
 					Icp64[j] = JOHNSWAP64(*pcrypt);
 					pcrypt += SIMD_COEF_64;
@@ -467,8 +467,8 @@ static void crypt_all_384(int count) {
 		}
 		// now marshal into crypt_out;
 		for (i = 0; i < NBKEYS512; ++i) {
-			ARCH_WORD_64 *Optr64 = (ARCH_WORD_64*)(crypt_key[idx+i]);
-			ARCH_WORD_64 *Iptr64 = &crypt64[ ((i/SIMD_COEF_64)*(SIMD_COEF_64*8)) + (i&(SIMD_COEF_64-1))];
+			uint64_t *Optr64 = (uint64_t*)(crypt_key[idx+i]);
+			uint64_t *Iptr64 = &crypt64[ ((i/SIMD_COEF_64)*(SIMD_COEF_64*8)) + (i&(SIMD_COEF_64-1))];
 			// we only want 16 bytes, not 48
 			for (j = 0; j < 2; ++j) {
 				Optr64[j] = JOHNSWAP64(*Iptr64);
@@ -503,12 +503,12 @@ static void crypt_all_512(int count) {
 		memcpy(crypt_key[idx], cp, BINARY_SIZE);
 #else
 		unsigned char _IBuf[128*NBKEYS512+MEM_ALIGN_SIMD], *keys, tmpBuf[64], _OBuf[64*NBKEYS512+MEM_ALIGN_SIMD], *crypt;
-		ARCH_WORD_64 j, *crypt64, offs[NBKEYS512];
+		uint64_t j, *crypt64, offs[NBKEYS512];
 		uint32_t len;
 
 		keys  = (unsigned char*)mem_align(_IBuf, MEM_ALIGN_SIMD);
 		crypt = (unsigned char*)mem_align(_OBuf, MEM_ALIGN_SIMD);
-		crypt64 = (ARCH_WORD_64*)crypt;
+		crypt64 = (uint64_t*)crypt;
 		memset(keys, 0, 128*NBKEYS512);
 
 		for (i = 0; i < NBKEYS512; ++i) {
@@ -529,8 +529,8 @@ static void crypt_all_512(int count) {
 			uint32_t k;
 			SIMDSHA512body(keys, crypt64, NULL, SSEi_FLAT_IN);
 			for (k = 0; k < NBKEYS512; ++k) {
-				ARCH_WORD_64 *pcrypt = &crypt64[ ((k/SIMD_COEF_64)*(SIMD_COEF_64*8)) + (k&(SIMD_COEF_64-1))];
-				ARCH_WORD_64 *Icp64 = (ARCH_WORD_64 *)(&keys[(k<<7)+offs[k]]);
+				uint64_t *pcrypt = &crypt64[ ((k/SIMD_COEF_64)*(SIMD_COEF_64*8)) + (k&(SIMD_COEF_64-1))];
+				uint64_t *Icp64 = (uint64_t *)(&keys[(k<<7)+offs[k]]);
 				for (j = 0; j < 8; ++j) {
 					Icp64[j] = JOHNSWAP64(*pcrypt);
 					pcrypt += SIMD_COEF_64;
@@ -539,8 +539,8 @@ static void crypt_all_512(int count) {
 		}
 		// now marshal into crypt_out;
 		for (i = 0; i < NBKEYS512; ++i) {
-			ARCH_WORD_64 *Optr64 = (ARCH_WORD_64*)(crypt_key[idx+i]);
-			ARCH_WORD_64 *Iptr64 = &crypt64[((i/SIMD_COEF_64)*(SIMD_COEF_64*8)) + (i&(SIMD_COEF_64-1))];
+			uint64_t *Optr64 = (uint64_t*)(crypt_key[idx+i]);
+			uint64_t *Iptr64 = &crypt64[((i/SIMD_COEF_64)*(SIMD_COEF_64*8)) + (i&(SIMD_COEF_64-1))];
 			// we only want 16 bytes, not 64
 			for (j = 0; j < 2; ++j) {
 				Optr64[j] = JOHNSWAP64(*Iptr64);
@@ -570,7 +570,7 @@ static void *get_binary(char *ciphertext)
 {
 	static union {
 		unsigned char cp[BINARY_SIZE]; /* only stores part the size of each hash */
-		ARCH_WORD_32 jnk[BINARY_SIZE/4];
+		uint32_t jnk[BINARY_SIZE/4];
 	} b;
 	char *cp = ciphertext;
 
@@ -617,13 +617,13 @@ static char *split(char *ciphertext, int index, struct fmt_main *self)
 	return ciphertext;
 }
 
-static int get_hash_0(int index) { return *(ARCH_WORD_32*)crypt_key[index] & PH_MASK_0; }
-static int get_hash_1(int index) { return *(ARCH_WORD_32*)crypt_key[index] & PH_MASK_1; }
-static int get_hash_2(int index) { return *(ARCH_WORD_32*)crypt_key[index] & PH_MASK_2; }
-static int get_hash_3(int index) { return *(ARCH_WORD_32*)crypt_key[index] & PH_MASK_3; }
-static int get_hash_4(int index) { return *(ARCH_WORD_32*)crypt_key[index] & PH_MASK_4; }
-static int get_hash_5(int index) { return *(ARCH_WORD_32*)crypt_key[index] & PH_MASK_5; }
-static int get_hash_6(int index) { return *(ARCH_WORD_32*)crypt_key[index] & PH_MASK_6; }
+static int get_hash_0(int index) { return *(uint32_t*)crypt_key[index] & PH_MASK_0; }
+static int get_hash_1(int index) { return *(uint32_t*)crypt_key[index] & PH_MASK_1; }
+static int get_hash_2(int index) { return *(uint32_t*)crypt_key[index] & PH_MASK_2; }
+static int get_hash_3(int index) { return *(uint32_t*)crypt_key[index] & PH_MASK_3; }
+static int get_hash_4(int index) { return *(uint32_t*)crypt_key[index] & PH_MASK_4; }
+static int get_hash_5(int index) { return *(uint32_t*)crypt_key[index] & PH_MASK_5; }
+static int get_hash_6(int index) { return *(uint32_t*)crypt_key[index] & PH_MASK_6; }
 
 static int salt_hash(void *salt)
 {

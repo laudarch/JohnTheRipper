@@ -81,6 +81,7 @@ extern void *mem_alloc_func(size_t size
 	, char *file, int line
 #endif
 	);
+
 /*
  * Allocates nmemb*size bytes using calloc(3) and returns a pointer to the
  * allocated memory, or NULL if nmemb or/and size are 0.
@@ -92,9 +93,22 @@ extern void *mem_calloc_func(size_t nmemb, size_t size
 #endif
 	);
 
+/*
+ * Change an existing allocated block to size bytes and return a pointer to
+ * the new block, or NULL if size is 0. Content is preserved to the extent
+ * possible.
+ * If an error occurs, the function does not return.
+ */
+extern void *mem_realloc_func(void *old_ptr, size_t size
+#if defined (MEMDBG_ON)
+	, char *file, int line
+#endif
+	);
+
 #if defined (MEMDBG_ON)
 #define mem_alloc(a) mem_alloc_func(a,__FILE__,__LINE__)
 #define mem_calloc(a,b) mem_calloc_func(a,b,__FILE__,__LINE__)
+#define mem_realloc(a,b) mem_realloc_func(a,b,__FILE__,__LINE__)
 #define mem_alloc_tiny(a,b) mem_alloc_tiny_func(a,b,__FILE__,__LINE__)
 #define mem_calloc_tiny(a,b) mem_calloc_tiny_func(a,b,__FILE__,__LINE__)
 #define mem_alloc_copy(a,b,c) mem_alloc_copy_func(a,b,c,__FILE__,__LINE__)
@@ -104,6 +118,7 @@ extern void *mem_calloc_func(size_t nmemb, size_t size
 #else
 #define mem_alloc(a) mem_alloc_func(a)
 #define mem_calloc(a,b) mem_calloc_func(a,b)
+#define mem_realloc(a,b) mem_realloc_func(a,b)
 #define mem_alloc_tiny(a,b) mem_alloc_tiny_func(a,b)
 #define mem_calloc_tiny(a,b) mem_calloc_tiny_func(a,b)
 #define mem_alloc_copy(a,b,c) mem_alloc_copy_func(a,b,c)
@@ -143,6 +158,32 @@ char *strdup_MSVC(const char *str);
 { \
 	if ((ptr)) { \
 		_aligned_free((ptr)); \
+		(ptr) = NULL; \
+	} \
+}
+#else
+#define MEM_FREE(ptr) \
+{ \
+	if ((ptr)) { \
+		MEMDBG_free(((const void*)ptr),__FILE__,__LINE__); \
+		(ptr) = NULL; \
+	} \
+}
+#endif
+
+#elif HAVE___MINGW_ALIGNED_MALLOC
+#if !defined (MEMDBG_ON)
+#define malloc(a) __mingw_aligned_malloc(a,(sizeof(long long)))
+#define realloc(a,b) __mingw_aligned_realloc(a,b,(sizeof(long long)))
+#define calloc(a,b) memset(__mingw_aligned_malloc(a*b,(sizeof(long long))),0,a*b)
+#define free(a) __mingw_aligned_free(a)
+#define strdup(a) strdup_MSVC(a)
+char *strdup_MSVC(const char *str);
+
+#define MEM_FREE(ptr) \
+{ \
+	if ((ptr)) { \
+		__mingw_aligned_free((ptr)); \
 		(ptr) = NULL; \
 	} \
 }
@@ -285,12 +326,12 @@ void alter_endianity_w64(void *x, unsigned int count);
 #define alter_endianity_to_LE(ptr,word32_cnt) do{ \
     int i; \
     for (i=0;i<word32_cnt; i++) \
-        ((ARCH_WORD_32*)ptr)[i] = JOHNSWAP(((ARCH_WORD_32*)ptr)[i]); \
+        ((uint32_t*)ptr)[i] = JOHNSWAP(((uint32_t*)ptr)[i]); \
 }while(0)
 #define alter_endianity_to_LE64(ptr,word64_cnt) do{ \
     int i; \
     for (i=0;i<word64_cnt; i++) \
-        ((ARCH_WORD_64*)ptr)[i] = JOHNSWAP64(((ARCH_WORD_64*)ptr)[i]); \
+        ((uint64_t*)ptr)[i] = JOHNSWAP64(((uint64_t*)ptr)[i]); \
 }while(0)
 #else
 #define alter_endianity_to_LE(a,b)
@@ -298,12 +339,12 @@ void alter_endianity_w64(void *x, unsigned int count);
 #define alter_endianity_to_BE(ptr,word32_cnt) do{ \
     int i; \
     for (i=0;i<word32_cnt; i++) \
-        ((ARCH_WORD_32*)ptr)[i] = JOHNSWAP(((ARCH_WORD_32*)ptr)[i]); \
+        ((uint32_t*)ptr)[i] = JOHNSWAP(((uint32_t*)ptr)[i]); \
 }while(0)
 #define alter_endianity_to_BE64(ptr,word64_cnt) do{ \
     int i; \
     for (i=0;i<word64_cnt; i++) \
-        ((ARCH_WORD_64*)ptr)[i] = JOHNSWAP64(((ARCH_WORD_64*)ptr)[i]); \
+        ((uint64_t*)ptr)[i] = JOHNSWAP64(((uint64_t*)ptr)[i]); \
 }while(0)
 #endif
 #else

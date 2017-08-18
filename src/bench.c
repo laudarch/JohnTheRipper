@@ -315,6 +315,7 @@ char *benchmark_format(struct fmt_main *format, int salts,
 #endif
 	int salts_done = 0;
 	int wait = 0;
+	int dyna_copied = 0;
 
 	clk_tck_init();
 
@@ -379,7 +380,8 @@ char *benchmark_format(struct fmt_main *format, int salts,
 	}
 
 	for (index = 0; index < 2; index++) {
-		two_salts[index] = mem_alloc_align(format->params.salt_size, format->params.salt_align);
+		two_salts[index] = mem_alloc_align(format->params.salt_size,
+		                                   format->params.salt_align);
 
 		if ((ciphertext = format->params.tests[index].ciphertext)) {
 			char **fields = format->params.tests[index].fields;
@@ -393,6 +395,7 @@ char *benchmark_format(struct fmt_main *format, int salts,
 			assert(index > 0);
 /* If we have exactly one test vector, reuse its salt in two_salts[1] */
 			salt = two_salts[0];
+			dyna_copied = 1;
 		}
 
 /* mem_alloc()'ed two_salts[index] may be NULL if salt_size is 0 */
@@ -511,7 +514,7 @@ char *benchmark_format(struct fmt_main *format, int salts,
 	do {
 		int count = max;
 
-#if defined(HAVE_OPENCL) || defined(HAVE_CUDA)
+#if defined(HAVE_OPENCL)
 		if (!bench_running)
 			advance_cursor();
 #endif
@@ -565,7 +568,8 @@ char *benchmark_format(struct fmt_main *format, int salts,
 #endif
 
 	for (index = 0; index < 2; index++) {
-		dyna_salt_remove(two_salts[index]);
+		if (index == 0 || !dyna_copied)
+			dyna_salt_remove(two_salts[index]);
 		MEM_FREE(two_salts[index]);
 	}
 
@@ -639,7 +643,7 @@ int benchmark_all(void)
 	char *result, *msg_1, *msg_m;
 	struct bench_results results_1, results_m;
 	char s_real[64], s_virtual[64];
-#if defined(HAVE_OPENCL) || defined(HAVE_CUDA)
+#if defined(HAVE_OPENCL)
 	char s_gpu[16 * MAX_GPU_DEVICES] = "";
 	int i;
 #else
@@ -653,7 +657,7 @@ int benchmark_all(void)
 	int ompt_start = omp_get_max_threads();
 #endif
 
-#if defined(HAVE_OPENCL) || defined(HAVE_CUDA)
+#if defined(HAVE_OPENCL)
 	if (!benchmark_time) {
 		/* This will make the majority of OpenCL formats
 		   also do "quick" benchmarking. But if LWS or
@@ -678,7 +682,7 @@ AGAIN:
 #endif
 	if ((format = fmt_list))
 	do {
-#if defined(HAVE_OPENCL) || defined(HAVE_CUDA)
+#if defined(HAVE_OPENCL)
 		int n = 0;
 #endif
 		memHand = MEMDBG_getSnapshot(0);
@@ -818,7 +822,7 @@ AGAIN:
 			goto next;
 		}
 
-#if defined(HAVE_CUDA) || defined(HAVE_OPENCL)
+#if defined(HAVE_OPENCL)
 		if (benchmark_time > 1)
 		for (i = 0; i < MAX_GPU_DEVICES &&
 			     gpu_device_list[i] != -1; i++) {

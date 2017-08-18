@@ -71,7 +71,7 @@ static int omp_t = 1;
 #define HASH_LENGTH		44
 #define BINARY_SIZE		32
 #define SALT_SIZE		sizeof(struct custom_salt)
-#define BINARY_ALIGN	sizeof(ARCH_WORD_32)
+#define BINARY_ALIGN	sizeof(uint32_t)
 #define SALT_ALIGN		sizeof(int)
 
 #ifdef SIMD_COEF_32
@@ -93,7 +93,7 @@ static struct fmt_tests django_tests[] = {
 };
 
 static char (*saved_key)[PLAINTEXT_LENGTH + 1];
-static ARCH_WORD_32 (*crypt_out)[BINARY_SIZE / sizeof(ARCH_WORD_32)];
+static uint32_t (*crypt_out)[BINARY_SIZE / sizeof(uint32_t)];
 
 static struct custom_salt {
 	int type;
@@ -218,7 +218,7 @@ static int crypt_all(int *pcount, struct db_salt *salt)
 		int lens[MAX_KEYS_PER_CRYPT], i;
 		unsigned char *pin[MAX_KEYS_PER_CRYPT];
 		union {
-			ARCH_WORD_32 *pout[MAX_KEYS_PER_CRYPT];
+			uint32_t *pout[MAX_KEYS_PER_CRYPT];
 			unsigned char *poutc;
 		} x;
 		for (i = 0; i < MAX_KEYS_PER_CRYPT; ++i) {
@@ -228,10 +228,6 @@ static int crypt_all(int *pcount, struct db_salt *salt)
 		}
 		pbkdf2_sha256_sse((const unsigned char **)pin, lens, cur_salt->salt, strlen((char*)cur_salt->salt), cur_salt->iterations, &(x.poutc), 32, 0);
 #else
-//		PKCS5_PBKDF2_HMAC(saved_key[index], strlen(saved_key[index]),
-//			cur_salt->salt, strlen((char*)cur_salt->salt),
-//			cur_salt->iterations, EVP_sha256(), 32, (unsigned char*)crypt_out[index]);
-
 		pbkdf2_sha256((unsigned char *)saved_key[index], strlen(saved_key[index]),
 			cur_salt->salt, strlen((char*)cur_salt->salt),
 			cur_salt->iterations, (unsigned char*)crypt_out[index], 32, 0);

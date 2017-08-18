@@ -1,3 +1,11 @@
+/*
+ * This software is Copyright (c) 2016 Denis Burykin
+ * [denis_burykin yahoo com], [denis-burykin2014 yandex ru]
+ * and it is hereby released to the general public under the following terms:
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted.
+ *
+ */
 #ifndef _JTR_MASK_H_
 #define _JTR_MASK_H_
 
@@ -7,12 +15,12 @@
  * Functions to access mask data.
  */
 
-static inline int mask_is_inactive()
+inline static int mask_is_inactive()
 {
 	return mask_int_cand.num_int_cand == 1;
 }
 
-static inline unsigned int mask_num_cand()
+inline static unsigned int mask_num_cand()
 {
 	return mask_int_cand.num_int_cand;
 }
@@ -38,9 +46,5 @@ void mask_reconstruct_plaintext(
 		char *key,
 		unsigned char *range_info,
 		unsigned int gen_id);
-
-// Returns max. possible value for 'mask_int_cand_target'
-unsigned int mask_estimate_num_cand_max();
-
 
 #endif

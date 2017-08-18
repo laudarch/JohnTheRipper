@@ -37,7 +37,7 @@ john_register_one(&fmt_bks);
 #define ALGORITHM_NAME		"PKCS12 PBE " SHA1_ALGORITHM_NAME
 #define PLAINTEXT_LENGTH	31
 #define SALT_SIZE		sizeof(struct custom_salt)
-#define SALT_ALIGN		sizeof(ARCH_WORD_32)
+#define SALT_ALIGN		sizeof(uint32_t)
 #define BINARY_SIZE		0
 #define BINARY_ALIGN		1
 #define BENCHMARK_COMMENT	""
@@ -205,15 +205,15 @@ static void *get_salt(char *ciphertext)
 	p = strtokm(NULL, "$");
 	cs.saltlen = atoi(p);
 	p = strtokm(NULL, "$");
-	for(i = 0; i < cs.saltlen; i++)
+	for (i = 0; i < cs.saltlen; i++)
 		cs.salt[i] = (atoi16[ARCH_INDEX(p[2*i])] << 4) | atoi16[ARCH_INDEX(p[2*i+1])];
 	p = strtokm(NULL, "$");
 	cs.store_data_length = hexlenl(p, 0) / 2;
-	for(i = 0; i < cs.store_data_length; i++)
+	for (i = 0; i < cs.store_data_length; i++)
 		cs.store_data[i] = (atoi16[ARCH_INDEX(p[2*i])] << 4) | atoi16[ARCH_INDEX(p[2*i+1])];
 	p = strtokm(NULL, "$");
 	if (cs.format == 0) { // BKS keystore
-		for(i = 0; i < 20; i++)
+		for (i = 0; i < 20; i++)
 			cs.store_hmac[i] = (atoi16[ARCH_INDEX(p[2*i])] << 4) | atoi16[ARCH_INDEX(p[2*i+1])];
 	}
 	MEM_FREE(keeptr);
@@ -440,7 +440,7 @@ struct fmt_main fmt_bks = {
 		SALT_ALIGN,
 		MIN_KEYS_PER_CRYPT,
 		MAX_KEYS_PER_CRYPT,
-		FMT_CASE | FMT_8_BIT | FMT_OMP,
+		FMT_CASE | FMT_8_BIT | FMT_OMP | FMT_HUGE_INPUT,
 		{ NULL },
 		{ FORMAT_TAG },
 		tests
@@ -456,7 +456,7 @@ struct fmt_main fmt_bks = {
 		{ NULL },
 		fmt_default_source,
 		{
-			fmt_default_binary_hash /* Not usable with $SOURCE_HASH$ */
+			fmt_default_binary_hash
 		},
 		fmt_default_salt_hash,
 		NULL,
@@ -466,7 +466,7 @@ struct fmt_main fmt_bks = {
 		fmt_default_clear_keys,
 		crypt_all,
 		{
-			fmt_default_get_hash /* Not usable with $SOURCE_HASH$ */
+			fmt_default_get_hash
 		},
 		cmp_all,
 		cmp_one,

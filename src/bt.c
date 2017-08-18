@@ -15,7 +15,6 @@
 #include <signal.h>
 #include <unistd.h>
 
-#include "options.h"
 #include "misc.h" // error()
 #include "bt_twister.h"
 #include "bt_hash_types.h"
@@ -351,7 +350,7 @@ static void calc_hash_mdoulo_table_size(unsigned int *store, auxilliary_offset_d
 
 static unsigned int create_tables()
 {
- 	unsigned int i;
+	unsigned int i;
 
 	unsigned int bitmap = ((1ULL << (sizeof(OFFSET_TABLE_WORD) * 8)) - 1) & 0xFFFFFFFF;
 	unsigned int limit = bitmap % hash_table_size + 1;
@@ -563,11 +562,6 @@ unsigned int create_perfect_hash_table(int htype, void *loaded_hashes_ptr,
 	unsigned int approx_hash_table_sz, approx_offset_table_sz, i, dupe_remove_ht_sz;
 	struct sigaction new_action, old_action;
 	struct itimerval old_it;
-
-	if ((options.flags & FLG_SINGLE_CHK) || (options.flags & FLG_BATCH_CHK)) {
-		fprintf(stderr, "Error: This format can't be used with single mode. Use the CPU format instead.\n");
-		error();
-	}
 
 	total_memory_in_bytes = 0;
 

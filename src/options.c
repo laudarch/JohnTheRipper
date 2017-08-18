@@ -65,6 +65,10 @@ static struct opt_entry opt_list[] = {
 	{"", FLG_PASSWD, 0, 0, 0, OPT_FMT_ADD_LIST, &options.passwd},
 	{"single", FLG_SINGLE_SET, FLG_CRACKING_CHK, 0, FLG_STACKING,
 		OPT_FMT_STR_ALLOC, &options.activesinglerules},
+	{"single-seed", FLG_ZERO, 0, FLG_SINGLE_CHK, OPT_REQ_PARAM,
+		OPT_FMT_STR_ALLOC, &options.seed_word},
+	{"single-wordlist", FLG_ZERO, 0, FLG_SINGLE_CHK, OPT_REQ_PARAM,
+		OPT_FMT_STR_ALLOC, &options.seed_file},
 	{"wordlist", FLG_WORDLIST_SET, FLG_CRACKING_CHK,
 		0, 0, OPT_FMT_STR_ALLOC, &options.wordlist},
 	{"loopback", FLG_LOOPBACK_SET, FLG_CRACKING_CHK,
@@ -228,6 +232,8 @@ static struct opt_entry opt_list[] = {
 		"%u", &options.req_minlength},
 	{"max-length", FLG_ZERO, 0, FLG_CRACKING_CHK, OPT_REQ_PARAM,
 		"%u", &options.req_maxlength},
+	{"max-candidates", FLG_ZERO, 0, FLG_CRACKING_CHK, OPT_REQ_PARAM,
+		"%lld", &options.max_cands},
 	{"max-run-time", FLG_ZERO, 0, FLG_CRACKING_CHK, OPT_REQ_PARAM,
 		"%d", &options.max_run_time},
 	{"progress-every", FLG_ZERO, 0, FLG_CRACKING_CHK, OPT_REQ_PARAM,
@@ -244,7 +250,7 @@ static struct opt_entry opt_list[] = {
 	{"force-vector-width", FLG_VECTOR, FLG_VECTOR, 0,
 		(FLG_SCALAR | OPT_REQ_PARAM), "%u", &options.v_width},
 #endif
-#if defined(HAVE_OPENCL) || defined(HAVE_CUDA)
+#if defined(HAVE_OPENCL)
 	{"devices", FLG_ZERO, 0, 0, OPT_REQ_PARAM,
 		OPT_FMT_ADD_LIST_MULTI, &options.gpu_devices},
 #endif
@@ -334,15 +340,9 @@ JOHN_USAGE_FORK \
 #define JOHN_USAGE_FORMAT \
 "--format=NAME              force hash of type NAME. The supported formats can\n" \
 "                           be seen with --list=formats and --list=subformats\n\n"
-#if defined(HAVE_OPENCL) && defined(HAVE_CUDA)
-#define JOHN_USAGE_GPU \
-"--devices=N[,..]           set OpenCL or CUDA device(s)\n"
-#elif defined(HAVE_OPENCL)
+#if defined(HAVE_OPENCL)
 #define JOHN_USAGE_GPU \
 "--devices=N[,..]           set OpenCL device(s) (see --list=opencl-devices)\n"
-#elif defined (HAVE_CUDA)
-#define JOHN_USAGE_GPU \
-"--device=N                 set CUDA device (see --list=cuda-devices)\n"
 #endif
 
 static void print_usage(char *name)
@@ -351,7 +351,7 @@ static void print_usage(char *name)
 		exit(0);
 
 	printf(JOHN_USAGE, name);
-#if defined(HAVE_OPENCL) || defined(HAVE_CUDA)
+#if defined(HAVE_OPENCL)
 	printf("%s", JOHN_USAGE_GPU);
 #endif
 	printf("%s", JOHN_USAGE_FORMAT);
@@ -365,19 +365,15 @@ void opt_print_hidden_usage(void)
 	puts("--config=FILE              use FILE instead of john.conf or john.ini");
 	puts("--mem-file-size=SIZE       size threshold for wordlist preload (default 5 MB)");
 	printf("--format=CLASS             valid classes: dynamic, cpu");
-#if defined(HAVE_OPENCL) || defined(HAVE_CUDA)
-	printf(", gpu");
-#ifdef HAVE_CUDA
-	printf(", cuda");
-#endif
 #ifdef HAVE_OPENCL
 	printf(", opencl");
-#endif
 #endif
 #ifdef _OPENMP
 	printf(", omp");
 #endif
 	printf("\n");
+	puts("--single-seed=WORD[,WORD]  add static seed word(s) for all salts in single mode");
+	puts("--single-wordlist=FILE     wordlist with static seed words. Use a short one!");
 	puts("--subformat=FORMAT         pick a benchmark format for --format=crypt");
 	puts("--mkpc=N                   request a lower max. keys per crypt");
 	puts("--min-length=N             request a minimum candidate length in bytes");
@@ -392,6 +388,8 @@ void opt_print_hidden_usage(void)
 	puts("--crack-status             emit a status line whenever a password is cracked");
 	puts("--keep-guessing            try more candidates for cracked hashes (ie. search");
 	puts("                           for plaintext collisions)");
+	puts("--max-candidates=[-]N      gracefully exit after this many candidates tried.");
+	puts("                           If negative, reset count on each crack");
 	puts("--max-run-time=[-]N        gracefully exit after this many seconds. If");
 	puts("                           negative, reset timer on each crack");
 	puts("--regen-lost-salts=N       brute force unknown salts (see doc/OPTIONS)");
@@ -461,7 +459,7 @@ void opt_init(char *name, int argc, char **argv, int show_usage)
 	list_init(&options.loader.users);
 	list_init(&options.loader.groups);
 	list_init(&options.loader.shells);
-#if defined(HAVE_OPENCL) || defined(HAVE_CUDA)
+#if defined(HAVE_OPENCL)
 	list_init(&options.gpu_devices);
 #endif
 
@@ -538,7 +536,7 @@ void opt_init(char *name, int argc, char **argv, int show_usage)
 		}
 	}
 
-	/* Bodge for bash completion of eg. "john -stdout -list=..." */
+	/* Bodge for bash completion of e.g. "john -stdout -list=..." */
 	if (options.listconf != NULL && options.fork == 0)
 		options.flags |= (FLG_CRACKING_SUP | FLG_STDIN_SET);
 
@@ -666,7 +664,7 @@ void opt_init(char *name, int argc, char **argv, int show_usage)
 		char *range[FMT_TUNABLE_COSTS] = { 0 };
 		char *dummy;
 
-		for( i = 0; i < FMT_TUNABLE_COSTS; i++) {
+		for ( i = 0; i < FMT_TUNABLE_COSTS; i++) {
 			if (i)
 				range[i] = strtok(NULL, ",");
 			else
@@ -682,7 +680,7 @@ void opt_init(char *name, int argc, char **argv, int show_usage)
 				                " supported\n", FMT_TUNABLE_COSTS);
 			error();
 		}
-		for( i = 0; i < FMT_TUNABLE_COSTS; i++) {
+		for ( i = 0; i < FMT_TUNABLE_COSTS; i++) {
 			int negative;
 			int two_values;
 
@@ -734,7 +732,7 @@ void opt_init(char *name, int argc, char **argv, int show_usage)
 	else {
 		int i;
 
-		for( i = 0; i < FMT_TUNABLE_COSTS; i++) {
+		for ( i = 0; i < FMT_TUNABLE_COSTS; i++) {
 			options.loader.min_cost[i] = 0;
 			options.loader.max_cost[i] = UINT_MAX;
 		}

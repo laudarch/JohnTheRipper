@@ -83,7 +83,7 @@ john_register_one(&fmt_leet);
 #define BENCHMARK_LENGTH        -1
 #define BINARY_SIZE             64
 #define SALT_SIZE               sizeof(struct custom_salt)
-#define BINARY_ALIGN            sizeof(ARCH_WORD_64)
+#define BINARY_ALIGN            sizeof(uint64_t)
 #define SALT_ALIGN              sizeof(int)
 #ifdef SIMD_COEF_64
 #define MIN_KEYS_PER_CRYPT      (SIMD_COEF_64*SIMD_PARA_SHA512)
@@ -103,7 +103,7 @@ static struct fmt_tests leet_tests[] = {
 
 static char (*saved_key)[PLAINTEXT_LENGTH + 1];
 static int *saved_len;
-static ARCH_WORD_64 (*crypt_out)[1];
+static uint64_t (*crypt_out)[1];
 
 static struct custom_salt {
 	int saltlen;
@@ -145,6 +145,9 @@ static int valid(char *ciphertext, struct fmt_main *self)
 	if (q - p > 256)
 		return 0;
 
+	if (q - p == 0)
+		return 0;
+
 	q = strrchr(ciphertext, '$') + 1;
 	if (strlen(q) != BINARY_SIZE * 2)
 		goto err;
@@ -163,9 +166,9 @@ static char *prepare(char *split_fields[10], struct fmt_main *self)
 
 	if (!split_fields[0])
 		return split_fields[1];
-	if (strlen(split_fields[1]) != BINARY_SIZE * 2)
+	if (strnlen(split_fields[1], BINARY_SIZE * 2 + 1) != BINARY_SIZE * 2)
 		return split_fields[1];
-	cp = mem_alloc_tiny(strlen(split_fields[0]) + strlen(split_fields[1]) + 2, MEM_ALIGN_NONE);
+	cp = mem_alloc(strlen(split_fields[0]) + strlen(split_fields[1]) + 2);
 	sprintf(cp, "%s$%s", split_fields[0], split_fields[1]);
 	if (valid(cp, self)) {
 		return cp;
@@ -235,15 +238,15 @@ static int crypt_all(int *pcount, struct db_salt *salt)
 		int i;
 		union {
 			unsigned char buf[BINARY_SIZE];
-			ARCH_WORD_64 p64[1];
+			uint64_t p64[1];
 		} output1[MAX_KEYS_PER_CRYPT], output2;
 #ifdef SIMD_COEF_64
 		// Not sure why JTR_ALIGN(MEM_ALIGN_SIMD) does n ot work here
 		// but if used, it cores travis-ci, so we use mem_align instead
 		unsigned char _in[8*16*MAX_KEYS_PER_CRYPT+MEM_ALIGN_SIMD];
 		unsigned char _out[8*8*MAX_KEYS_PER_CRYPT+MEM_ALIGN_SIMD];
-		ARCH_WORD_64 *in = mem_align(_in, MEM_ALIGN_SIMD);
-		ARCH_WORD_64 *out = mem_align(_out, MEM_ALIGN_SIMD);
+		uint64_t *in = mem_align(_in, MEM_ALIGN_SIMD);
+		uint64_t *out = mem_align(_out, MEM_ALIGN_SIMD);
 
 		for (i = 0; i < MAX_KEYS_PER_CRYPT; ++i) {
 			char *cp = &((char*)in)[128*i];
@@ -280,14 +283,14 @@ static int cmp_all(void *binary, int count)
 {
 	int index = 0;
 	for (; index < count; index++)
-		if (((ARCH_WORD_64*)binary)[0] == crypt_out[index][0])
+		if (((uint64_t*)binary)[0] == crypt_out[index][0])
 			return 1;
 	return 0;
 }
 
 static int cmp_one(void *binary, int index)
 {
-	return ((ARCH_WORD_64*)binary)[0] == crypt_out[index][0];
+	return ((uint64_t*)binary)[0] == crypt_out[index][0];
 }
 
 static int cmp_exact(char *source, int index)

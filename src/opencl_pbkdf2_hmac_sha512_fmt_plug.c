@@ -15,16 +15,17 @@ extern struct fmt_main fmt_opencl_pbkdf2_hmac_sha512;
 john_register_one(&fmt_opencl_pbkdf2_hmac_sha512);
 #else
 
+#include <stdint.h>
 #include <ctype.h>
 #include <string.h>
 #include <assert.h>
+
 #include "misc.h"
 #include "arch.h"
 #include "common.h"
 #include "formats.h"
 #include "options.h"
 #include "common-opencl.h"
-#include "stdint.h"
 #include "johnswap.h"
 #include "pbkdf2_hmac_common.h"
 
@@ -271,7 +272,7 @@ static int crypt_all(int *pcount, struct db_salt *salt)
 		NUUL, &global_work_size, lws, 0, NULL,
 		multi_profilingEvent[1]), "Run kernel");
 
-	for(i = 0; i < (ocl_autotune_running ? 1 : loops); i++) {
+	for (i = 0; i < (ocl_autotune_running ? 1 : loops); i++) {
 		BENCH_CLERROR(clEnqueueNDRangeKernel(queue[gpu_id],
 		        split_kernel,
 			1, NULL, &global_work_size, lws, 0, NULL,

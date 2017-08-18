@@ -2393,7 +2393,7 @@ def find_rc4_passinfo_xls(filename, stream):
                 verifier = data[16:32]
                 verifierHash = data[32:48]
                 return (salt, verifier, verifierHash)
-            elif data[0:4] == b'\x01\x00\x02\x00' or data[0:4] == b'\x01\x00\x03\x00':
+            elif data[0:4] == b'\x01\x00\x02\x00' or data[0:4] == b'\x01\x00\x03\x00' or data[0:4] == b'\x01\x00\x04\x00':
                 # If RC4 CryptoAPI encryption is used, certain storages and streams are stored in Encryption Stream
                 stm = StringIO(data)
                 stm.read(2)  # unused
@@ -2639,6 +2639,80 @@ def find_rc4_passinfo_ppt(filename, stream, offset):
     else:
         sys.stderr.write("%s : Cannot find RC4 pass info, is document encrypted?\n" % filename)
 
+
+def process_access_2007_older_crypto(filename):
+    """Dirty hash extractor for MS Office 2007 .accdb files which use CryptoAPI
+    based encryption."""
+
+    original = open(filename, "rb").read()
+
+    for i in range(0, len(original)):
+        data = original[i:40960]  # is this limit on data reasonable?
+        stream = StringIO(data)
+        if len(data) < 128:
+            return
+
+        major_version = unpack("<h", stream.read(2))[0]
+        minor_version = unpack("<h", stream.read(2))[0]
+
+        # RC4 CryptoAPI Encryption Header, Section 2.3.5.1 - RC4 CryptoAPI
+        # Encryption Header in [MS-OFFCRYPTO].pdf
+        unpack("<I", stream.read(4))[0]  # encryptionFlags
+        headerLength = unpack("<I", stream.read(4))[0]
+        unpack("<I", stream.read(4))[0]  # skipFlags
+        headerLength -= 4
+        sizeExtra = unpack("<I", stream.read(4))[0]  # sizeExtra
+        headerLength -= 4
+        algId = unpack("<I", stream.read(4))[0]  # algId, 0x00006801 (RC4 encryption)
+        headerLength -= 4
+        algHashId = unpack("<I", stream.read(4))[0]  # algHashId, 0x00008004 (SHA-1)
+        headerLength -= 4
+        keySize = unpack("<I", stream.read(4))[0]  # keySize, If set to 0, it MUST be interpreted as 40
+        headerLength -= 4
+        unpack("<I", stream.read(4))[0]  # providerType
+        headerLength -= 4
+        unpack("<I", stream.read(4))[0]  # unused
+        headerLength -= 4
+        unpack("<I", stream.read(4))[0]  # unused
+        headerLength -= 4
+        CSPName = stream.read(headerLength)
+        try:
+            provider = CSPName.decode('utf-16')
+            if provider.startswith("Microsoft Base Cryptographic Provider"):
+                pass
+        except:
+            continue
+
+        typ = None
+        if keySize == 128:
+            typ = 4
+        elif keySize == 40:
+            typ = 3
+        elif keySize == 0:
+            typ = 3
+        else:
+            # sys.stderr.write("%s : invalid keySize\n" % filename)
+            continue
+
+        if not type or (sizeExtra != 0) or (algId != 0x6801) or (algHashId != 0x8004):
+            continue
+
+        # Encryption verifier
+        saltSize = unpack("<I", stream.read(4))[0]
+        assert(saltSize == 16)
+        salt = stream.read(saltSize)
+        encryptedVerifier = stream.read(16)
+        verifierHashSize = unpack("<I", stream.read(4))[0]
+        assert(verifierHashSize == 20)
+        encryptedVerifierHash = stream.read(verifierHashSize)
+        sys.stdout.write("%s:$oldoffice$%s*%s*%s*%s\n" %
+                         (os.path.basename(filename), typ,
+                          binascii.hexlify(salt).decode("ascii"),
+                          binascii.hexlify(encryptedVerifier).decode("ascii"),
+                          binascii.hexlify(encryptedVerifierHash).decode("ascii")))
+        break
+
+
 from xml.etree.ElementTree import ElementTree
 import base64
 
@@ -2786,6 +2860,7 @@ have_summary = False
 summary = []
 
 import re
+from binascii import unhexlify
 
 
 def remove_html_tags(data):
@@ -2799,7 +2874,7 @@ def remove_extra_spaces(data):
 
 
 def process_file(filename):
-    # Test if a file is an OLE container:
+    # Test if a file is an OLE container
     try:
         f = open(filename, "rb")
         data = f.read(81920)  # is this enough?
@@ -2819,6 +2894,20 @@ def process_file(filename):
             start = data.find(accdb_xml_start)
             trailer = data.find(accdb_xml_trailer)
             xml_metadata_parser(data[start:trailer+len(accdb_xml_trailer)], filename)
+            return
+        elif accdb_magic in data:  # Access 2007 files using CryptoAPI
+            process_access_2007_older_crypto(filename)
+            return
+
+        # OneNote handling hack for OneNote versions >= 2013, see [MS-ONESTORE].pdf
+        onenote_magic = unhexlify("e4525c7b8cd8")
+        onenote_xml_start = b'<?xml version="1.0"'
+        onenote_xml_trailer = b'</encryption>'
+        if data.startswith(onenote_magic) and onenote_xml_start in data:
+            # find start and the end of the XML metadata stream
+            start = data.find(onenote_xml_start)
+            trailer = data.find(onenote_xml_trailer)
+            xml_metadata_parser(data[start:trailer+len(onenote_xml_trailer)], filename)
             return
 
         if not isOleFile(filename):
@@ -2935,10 +3024,10 @@ if __name__ == "__main__":
         sys.stderr.write("Usage: %s <encrypted Office file(s)>\n" % sys.argv[0])
         sys.exit(1)
 
-# set_debug_mode(1)
+    # set_debug_mode(1)
 
-for i in range(1, len(sys.argv)):
-    if not PY3:
-        ret = process_file(sys.argv[i].decode("utf8"))
-    else:
-        ret = process_file(sys.argv[i])
+    for i in range(1, len(sys.argv)):
+        if not PY3:
+            ret = process_file(sys.argv[i].decode("utf8"))
+        else:
+            ret = process_file(sys.argv[i])

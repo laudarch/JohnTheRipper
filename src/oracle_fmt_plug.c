@@ -45,11 +45,12 @@ static int omp_t = 1;
 #define PLAINTEXT_LENGTH		120 // worst case UTF-8 is 40 characters of Unicode, that'll do
 
 #define BINARY_SIZE			8
-#define BINARY_ALIGN			4
+#define BINARY_ALIGN		4
 #define MAX_USERNAME_LEN    30
 #define SALT_SIZE			(MAX_USERNAME_LEN*2 + 4)  // also contain the NULL
 #define SALT_ALIGN			2
-#define CIPHERTEXT_LENGTH		16
+#define CIPHERTEXT_LENGTH	16
+#define MAX_INPUT_LEN		(CIPHERTEXT_LENGTH + 3 + MAX_USERNAME_LEN * (options.input_enc == UTF_8 ? 3 : 1))
 
 #define MIN_KEYS_PER_CRYPT		1
 #define MAX_KEYS_PER_CRYPT		1
@@ -97,7 +98,7 @@ static UTF16 cur_salt[SALT_SIZE / 2 + PLAINTEXT_LENGTH];
 static UTF16 (*cur_key)[PLAINTEXT_LENGTH + 1];
 static char (*plain_key)[PLAINTEXT_LENGTH + 1];
 static int (*key_length);
-static ARCH_WORD_32 (*crypt_key)[2];
+static uint32_t (*crypt_key)[2];
 
 static DES_key_schedule desschedule_static;
 
@@ -114,8 +115,7 @@ static int valid(char *ciphertext, struct fmt_main *self)
 	 * 2 - it comes from memory, and has got O$ + salt + # + blah
 	 */
 
-	if (strlen(ciphertext) > CIPHERTEXT_LENGTH + 3 +
-	    MAX_USERNAME_LEN * (options.input_enc == UTF_8 ? 3 : 1))
+	if (strnlen(ciphertext, MAX_INPUT_LEN + 1) > MAX_INPUT_LEN)
 		return 0;
 
 	if (!memcmp(ciphertext, FORMAT_TAG, FORMAT_TAG_LEN))
@@ -149,7 +149,7 @@ static int valid(char *ciphertext, struct fmt_main *self)
 	}
 	else
 	{
-		if(strlen(ciphertext)!=CIPHERTEXT_LENGTH)
+		if (strlen(ciphertext)!=CIPHERTEXT_LENGTH)
 			return 0;
 		l = 0;
 	}
@@ -167,33 +167,34 @@ static char *prepare(char *split_fields[10], struct fmt_main *self)
 {
 	char *cp;
 
-	if (!strncmp(split_fields[1], FORMAT_TAG, FORMAT_TAG_LEN))
-		return split_fields[1];
 	if (!split_fields[0])
 		return split_fields[1];
-	cp = mem_alloc(strlen(split_fields[0]) + strlen(split_fields[1]) + 4);
-	sprintf (cp, "%s%s#%s", FORMAT_TAG, split_fields[0], split_fields[1]);
-	if (valid(cp, self))
-	{
-		UTF8 tmp8[MAX_USERNAME_LEN * 3 + 1];
-		int utf8len;
+	if (!strncmp(split_fields[1], FORMAT_TAG, FORMAT_TAG_LEN))
+		return split_fields[1];
+	if (strnlen(split_fields[1], CIPHERTEXT_LENGTH + 1) == CIPHERTEXT_LENGTH) {
+		cp = mem_alloc(strlen(split_fields[0]) + strlen(split_fields[1]) + 4);
+		sprintf (cp, "%s%s#%s", FORMAT_TAG, split_fields[0], split_fields[1]);
+		if (valid(cp, self)) {
+			UTF8 tmp8[MAX_USERNAME_LEN * 3 + 1];
+			int utf8len;
 
-		// we no longer need this.  It was just used for valid().   We will recompute
-		// all lengths, after we do an upcase, since upcase can change the length of the
-		// utf8 string.
-		MEM_FREE(cp);
+			// we no longer need this.  It was just used for valid().   We will recompute
+			// all lengths, after we do an upcase, since upcase can change the length of the
+			// utf8 string.
+			MEM_FREE(cp);
 
-		// Upcase user name, --encoding aware
-		utf8len = enc_uc(tmp8, sizeof(tmp8), (unsigned char*)split_fields[0], strlen(split_fields[0]));
+			// Upcase user name, --encoding aware
+			utf8len = enc_uc(tmp8, sizeof(tmp8), (unsigned char*)split_fields[0], strlen(split_fields[0]));
 
-		cp = mem_alloc_tiny(utf8len + strlen(split_fields[1]) + 4, MEM_ALIGN_NONE);
-		sprintf (cp, "%s%s#%s", FORMAT_TAG, tmp8, split_fields[1]);
+			cp = mem_alloc_tiny(utf8len + strlen(split_fields[1]) + 4, MEM_ALIGN_NONE);
+			sprintf (cp, "%s%s#%s", FORMAT_TAG, tmp8, split_fields[1]);
 #ifdef DEBUG_ORACLE
-		printf ("tmp8         : %s\n", tmp8);
+			printf ("tmp8         : %s\n", tmp8);
 #endif
-		return cp;
+			return cp;
+		}
+		MEM_FREE(cp);
 	}
-	MEM_FREE(cp);
 	return split_fields[1];
 }
 
@@ -328,7 +329,7 @@ static void * get_binary(char *ciphertext)
 	if (!out3) out3 = mem_alloc_tiny(BINARY_SIZE, MEM_ALIGN_WORD);
 
 	l = strlen(ciphertext) - CIPHERTEXT_LENGTH;
-	for(i=0;i<BINARY_SIZE;i++)
+	for (i=0;i<BINARY_SIZE;i++)
 	{
 		out3[i] = atoi16[ARCH_INDEX(ciphertext[i*2+l])]*16
 			+ atoi16[ARCH_INDEX(ciphertext[i*2+l+1])];
@@ -386,9 +387,9 @@ static int get_hash_6(int idx) { return crypt_key[idx][0] & PH_MASK_6; }
 static int cmp_all(void *binary, int count)
 {
 	int i;
-	ARCH_WORD_32 b = *(ARCH_WORD_32*)binary;
+	uint32_t b = *(uint32_t*)binary;
 	for (i = 0; i < count; ++i)
-		if (b == *((ARCH_WORD_32*)(crypt_key[i])) )
+		if (b == *((uint32_t*)(crypt_key[i])) )
 			return 1;
 	return 0;
 }

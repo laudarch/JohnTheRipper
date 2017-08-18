@@ -76,7 +76,7 @@ static struct fmt_tests sip_tests[] = {
 };
 
 static char (*saved_key)[PLAINTEXT_LENGTH + 1];
-static ARCH_WORD_32 (*crypt_key)[BINARY_SIZE/sizeof(ARCH_WORD_32)];
+static uint32_t (*crypt_key)[BINARY_SIZE/sizeof(uint32_t)];
 static char bin2hex_table[256][2]; /* table for bin<->hex mapping */
 
 static void init(struct fmt_main *self)
@@ -109,10 +109,10 @@ static int valid(char *ciphertext, struct fmt_main *self)
 		return 0;
 	if (strlen(ciphertext) > 2048) // sizeof(saltBuf) in get_salt
 		return 0;
-	for(i = 0; i < strlen(ciphertext); i++)
-		if(ciphertext[i] == '*')
+	for (i = 0; i < strlen(ciphertext); i++)
+		if (ciphertext[i] == '*')
 			res++;
-	if(res != 14)
+	if (res != 14)
 		goto err;
 	res = 0;
 	p += FORMAT_TAG_LEN;
@@ -228,7 +228,7 @@ static void *get_salt(char *ciphertext)
 	strncpy(login.qop,         lines[11], sizeof(login.qop)        - 1 );
 	strncpy(login.algorithm,   lines[12], sizeof(login.algorithm)  - 1 );
 	strncpy(login.hash,        lines[13], sizeof(login.hash)       - 1 );
-	if(strncmp(login.algorithm, "MD5", strlen(login.algorithm))) {
+	if (strncmp(login.algorithm, "MD5", strlen(login.algorithm))) {
 		printf("\n* Cannot crack '%s' hash, only MD5 supported so far...\n", login.algorithm);
 		error();
 	}
@@ -254,7 +254,7 @@ static void *get_salt(char *ciphertext)
 
 	/* Construct last part of final hash data: ':NONCE(:CNONCE:NONCE_COUNT:QOP):<static_hash>' */
 	/* no qop */
-	if(!strlen(login.qop))
+	if (!strlen(login.qop))
 		snprintf(salt.static_hash_data, STATIC_HASH_SIZE, ":%s:%s", login.nonce, static_hash);
 	/* qop/conce/cnonce_count */
 	else
@@ -332,7 +332,7 @@ static int cmp_all(void *binary, int count)
 {
 	int index;
 	for (index = 0; index < count; index++)
-		if ( ((ARCH_WORD_32*)binary)[0] == ((ARCH_WORD_32*)&(crypt_key[index][0]))[0] )
+		if ( ((uint32_t*)binary)[0] == ((uint32_t*)&(crypt_key[index][0]))[0] )
 			return 1;
 	return 0;
 
@@ -375,7 +375,7 @@ struct fmt_main fmt_sip = {
 		SALT_ALIGN,
 		MIN_KEYS_PER_CRYPT,
 		MAX_KEYS_PER_CRYPT,
-		FMT_CASE | FMT_8_BIT | FMT_OMP,
+		FMT_CASE | FMT_8_BIT | FMT_OMP | FMT_HUGE_INPUT,
 		{ NULL },
 		{ FORMAT_TAG },
 		sip_tests
@@ -391,7 +391,7 @@ struct fmt_main fmt_sip = {
 		{ NULL },
 		fmt_default_source,
 		{
-			fmt_default_binary_hash /* Not usable with $SOURCE_HASH$ */
+			fmt_default_binary_hash
 		},
 		fmt_default_salt_hash,
 		NULL,
@@ -401,7 +401,7 @@ struct fmt_main fmt_sip = {
 		fmt_default_clear_keys,
 		crypt_all,
 		{
-			fmt_default_get_hash /* Not usable with $SOURCE_HASH$ */
+			fmt_default_get_hash
 		},
 		cmp_all,
 		cmp_one,
